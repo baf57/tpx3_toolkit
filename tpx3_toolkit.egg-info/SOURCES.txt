@@ -1,0 +1,8 @@
+setup.py
+tpx3_toolkit/__init__.py
+tpx3_toolkit/core.py
+tpx3_toolkit/viewer.py
+tpx3_toolkit.egg-info/PKG-INFO
+tpx3_toolkit.egg-info/SOURCES.txt
+tpx3_toolkit.egg-info/dependency_links.txt
+tpx3_toolkit.egg-info/top_level.txt
