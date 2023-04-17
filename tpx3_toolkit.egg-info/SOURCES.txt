@@ -1,3 +1,4 @@
+README.md
 setup.py
 tpx3_toolkit/__init__.py
 tpx3_toolkit/core.py
