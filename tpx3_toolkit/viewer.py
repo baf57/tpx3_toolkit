@@ -93,17 +93,17 @@ def plot_coincidences(coincidences:np.ndarray,colorMap:str='',\
 def make_coincidences_axis(pix:np.ndarray,ax:Axes,\
                            colorMap:str='viridis') -> None:
 
-    xmin = np.min(pix[0,:])
-    xmax = np.max(pix[0,:])
-    ymin = np.min(pix[1,:])
-    ymax = np.max(pix[1,:])
+    ymin = np.min(pix[0,:])
+    ymax = np.max(pix[0,:])
+    xmin = np.min(pix[1,:])
+    xmax = np.max(pix[1,:])
 
     xrange = int(xmax - xmin)
     yrange = int(ymax - ymin)
 
     view = np.zeros((xrange+1,yrange+1))
 
-    indices = ((pix[0,:] - xmin).astype('int'),(pix[1,:]-ymin).astype('int'))
+    indices = ((pix[1,:] - xmin).astype('int'),(pix[0,:]-ymin).astype('int'))
     np.add.at(view,indices,1) # adds 1 to the view value at each hit's (x,y)
 
     if type(colorMap) is str:
@@ -115,7 +115,7 @@ def make_coincidences_axis(pix:np.ndarray,ax:Axes,\
     else:
         cmap.set_bad(cmap(0)) #type: ignore
 
-    ax.imshow(view,origin='upper',aspect='auto',extent=[0,xrange,0,yrange],\
+    ax.imshow(view,origin='lower',aspect='auto',extent=[0,xrange,0,yrange],\
         interpolation='none',cmap=cmap)
 
 def plot_correlations(coincidences:np.ndarray,colorMap:str="gray", \
