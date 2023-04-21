@@ -557,11 +557,11 @@ def process_Coincidences(inpFile:str,calibrationFile:str,beamSs:list[Beam],\
         respectively, which are considred to be coincident with one another in
         time. The beams are referenced by the following:
             [0,:,:]:
-                the signal beam(s) info with each entry the same as in `pix`
-                from `parse_raw_file`
-            [1,:,:]:
                 the idler beam(s) info with each entry the same as in `pix` from
                 `parse_raw_file`
+            [1,:,:]:
+                the signal beam(s) info with each entry the same as in `pix`
+                from `parse_raw_file`
 
     Notes
     -----
@@ -584,7 +584,7 @@ def process_Coincidences(inpFile:str,calibrationFile:str,beamSs:list[Beam],\
 
     pix = correct_ToA(pix,calibrationFile)
 
-    coincidences = find_coincidences(pix,[beamSs,beamIs],coincidenceTimeWindow)
+    coincidences = find_coincidences(pix,[beamIs,beamSs],coincidenceTimeWindow)
 
     return coincidences
     

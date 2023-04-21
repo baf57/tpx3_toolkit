@@ -77,34 +77,104 @@ def plot_coincidences(coincidences:np.ndarray,colorMap:str='',\
 
     if fig is None:
         fig = plt.figure(figsize=(12,6))
-        ax_signal = fig.add_subplot(121)
-        ax_idler = fig.add_subplot(122)
+        ax_signal = fig.add_subplot(122)
+        ax_idler = fig.add_subplot(121)
     else:
-        [ax_signal,ax_idler] = fig.axes
+        [ax_idler,ax_signal] = fig.axes
 
-    make_coincidences_axis(coincidences[1,:,:],ax_signal,colorMap)
-    make_coincidences_axis(coincidences[0,:,:],ax_idler,colorMap)
+    _make_coincidences_axis(coincidences[0,:,:],ax_idler,colorMap)
+    _make_coincidences_axis(coincidences[1,:,:],ax_signal,colorMap)
 
     ax_signal.set_title("Signal")
     ax_idler.set_title("Idler")
 
     return fig
 
-def make_coincidences_axis(pix:np.ndarray,ax:Axes,\
+def plot_correlations(coincidences:np.ndarray,colorMap:str="gray", \
+                      fig:Figure=None) -> Figure: #type:ignore
+    if fig is None:
+        fig = plt.figure(figsize=(12,6))
+        ax_x = fig.add_subplot(121)
+        ax_y = fig.add_subplot(122)
+    else:
+        [ax_x,ax_y] = fig.axes
+
+    _make_coincidences_axis(coincidences[:,0,:],ax_x,colorMap)
+    _make_coincidences_axis(coincidences[:,1,:],ax_y,colorMap)
+
+    ax_x.set_ylabel("Signal")
+    ax_x.set_xlabel("Idler")
+    ax_x.set_title("X")
+    ax_y.set_ylabel("Signal")
+    ax_y.set_xlabel("Idler")
+    ax_y.set_title("Y")
+
+    return fig
+
+
+def plot_histogram(coincidences:np.ndarray, min_bin=-200, max_bin=200,\
+                   fig:Figure=None) -> Figure:
+    if fig is None:
+        fig = plt.figure(figsize=(4,8))
+        ax = fig.add_axes([0,0,1,1])
+    else:
+        ax = fig.gca()
+
+    ax.set_xlabel("dt [ns]")
+    ax.set_ylabel("Count")
+
+    bins = np.linspace(min_bin,max_bin,100)
+    # get difference between signal and idler arrival times
+    dt = coincidences[1,2,:] - coincidences[0,2,:]
+
+    ax.hist(dt,bins,color='r')
+
+    return fig
+
+def plot_coincidence_trace(pix:np.ndarray, loc:int, orientation:str,
+                           min_loc:int=0, max_loc:int=256, ax:Axes=None) \
+                            -> tuple[Figure, np.ndarray]:
+    # pix is a coincidences matrix which has already been reduces to 
+    # 2D (i.e. 1 beam x-y info, only x info for both beams, etc.)
+    if ax is None:
+        fig = plt.figure(figsize=(6,8))
+        ax = fig.add_axes([0,0,1,1])
+    else:
+        fig = ax.get_figure()
+
+    (view,x,y) = _make_view(pix)
+
+    ax.set_xlabel(f'Index')
+    ax.set_ylabel(f'Count')
+    ax.set_xlim(min_loc, max_loc)
+
+    if orientation == 'x':
+        data = view[:,loc]
+    else:
+        data = view[loc,:]
+
+    ax.bar(np.arange(data.size)+0.5,data,color='gray')
+
+    return (fig,data,view)
+
+def plot_coincidence_xy(correlations:np.ndarray, sign:int=1, fig:Figure=None) -> Figure:
+    if fig is None:
+        fig = plt.figure(figsize=(4,8))
+        ax = fig.add_axes([0,0,1,1])
+    else:
+        ax = fig.gca()
+
+    data = correlations[0,:,:] + (sign/np.abs(sign)) * correlations[1,:,:]
+    _make_coincidences_axis(data,ax)
+
+    ax.set_xlabel(r'$x_{idl} + x_{sig}$')
+    ax.set_ylabel(r'$y_{idl} + y_{sig}$')
+
+    return fig
+
+def _make_coincidences_axis(pix:np.ndarray,ax:Axes,\
                            colorMap:str='viridis') -> None:
-
-    ymin = np.min(pix[0,:])
-    ymax = np.max(pix[0,:])
-    xmin = np.min(pix[1,:])
-    xmax = np.max(pix[1,:])
-
-    xrange = int(xmax - xmin)
-    yrange = int(ymax - ymin)
-
-    view = np.zeros((xrange+1,yrange+1))
-
-    indices = ((pix[1,:] - xmin).astype('int'),(pix[0,:]-ymin).astype('int'))
-    np.add.at(view,indices,1) # adds 1 to the view value at each hit's (x,y)
+    (view,xrange,yrange) = _make_view(pix)
 
     if type(colorMap) is str:
         cmap = copy.copy(cm.get_cmap(colorMap))
@@ -118,42 +188,18 @@ def make_coincidences_axis(pix:np.ndarray,ax:Axes,\
     ax.imshow(view,origin='lower',aspect='auto',extent=[0,xrange,0,yrange],\
         interpolation='none',cmap=cmap)
 
-def plot_correlations(coincidences:np.ndarray,colorMap:str="gray", \
-                      fig:Figure=None) -> Figure: #type:ignore
-    if fig is None:
-        fig = plt.figure(figsize=(12,6))
-        ax_x = fig.add_subplot(121)
-        ax_y = fig.add_subplot(122)
-    else:
-        [ax_x,ax_y] = fig.axes
+def _make_view(pix:np.ndarray):
+    xmin = np.min(pix[0,:])
+    xmax = np.max(pix[0,:])
+    ymin = np.min(pix[1,:])
+    ymax = np.max(pix[1,:])
 
-    make_coincidences_axis(coincidences[:,1,:],ax_x,colorMap)
-    make_coincidences_axis(coincidences[:,0,:],ax_y,colorMap)
+    xrange = int(xmax - xmin)
+    yrange = int(ymax - ymin)
 
-    ax_x.set_ylabel("Signal")
-    ax_x.set_xlabel("Idler")
-    ax_x.set_title("X")
-    ax_y.set_ylabel("Signal")
-    ax_y.set_xlabel("Idler")
-    ax_y.set_title("Y")
+    view = np.zeros((yrange+1,xrange+1))
 
-    return fig
+    indices = ((pix[1,:] - ymin).astype('int'),(pix[0,:]-xmin).astype('int'))
+    np.add.at(view,indices,1) # adds 1 to the view value at each hit's (x,y)
 
-
-def plot_histogram(coincidences:np.ndarray, min_bin=-200, max_bin=200,\
-                   fig:Figure=None) -> Figure: #type: ignore
-    if fig is None:
-        fig = plt.figure(figsize=(4,8))
-        ax = fig.add_axes([0,0,1,1])
-    else:
-        ax = fig.gca()
-        ax.clear()
-
-    ax.set_xlabel("dt [ns]")
-    ax.set_ylabel("Count")
-
-    bins = np.linspace(min_bin,max_bin,100)
-    # get difference between signal and idler arrival times
-    dt = coincidences[1,2,:] - coincidences[0,2,:]
-
-    ax.hist(dt,bins,color='r')
+    return (view,xrange,yrange)
