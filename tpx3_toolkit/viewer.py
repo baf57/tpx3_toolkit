@@ -133,7 +133,7 @@ def plot_histogram(coincidences:np.ndarray, min_bin=-200, max_bin=200,\
 
 def plot_coincidence_trace(pix:np.ndarray, loc:int, orientation:str,
                            min_loc:int=0, max_loc:int=256, ax:Axes=None) \
-                            -> tuple[Figure, np.ndarray]:
+                            -> tuple[Figure, np.ndarray, np.ndarray]:
     # pix is a coincidences matrix which has already been reduces to 
     # 2D (i.e. 1 beam x-y info, only x info for both beams, etc.)
     if ax is None:
@@ -157,7 +157,8 @@ def plot_coincidence_trace(pix:np.ndarray, loc:int, orientation:str,
 
     return (fig,data,view)
 
-def plot_coincidence_xy(correlations:np.ndarray, sign:int=1, fig:Figure=None) -> Figure:
+def plot_coincidence_xy(correlations:np.ndarray, sign:int=1, fig:Figure=None)\
+                                                   -> tuple[Figure,np.ndarray]:
     if fig is None:
         fig = plt.figure(figsize=(4,8))
         ax = fig.add_axes([0,0,1,1])
@@ -165,12 +166,12 @@ def plot_coincidence_xy(correlations:np.ndarray, sign:int=1, fig:Figure=None) ->
         ax = fig.gca()
 
     data = correlations[0,:,:] + (sign/np.abs(sign)) * correlations[1,:,:]
-    _make_coincidences_axis(data,ax)
+    view = _make_coincidences_axis(data,ax)
 
     ax.set_xlabel(r'$x_{idl} + x_{sig}$')
     ax.set_ylabel(r'$y_{idl} + y_{sig}$')
 
-    return fig
+    return (fig,view)
 
 def _make_coincidences_axis(pix:np.ndarray,ax:Axes,\
                            colorMap:str='viridis') -> None:
@@ -187,6 +188,8 @@ def _make_coincidences_axis(pix:np.ndarray,ax:Axes,\
 
     ax.imshow(view,origin='lower',aspect='auto',extent=[0,xrange,0,yrange],\
         interpolation='none',cmap=cmap)
+
+    return view
 
 def _make_view(pix:np.ndarray):
     xmin = np.min(pix[0,:])
