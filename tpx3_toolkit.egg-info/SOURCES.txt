@@ -6,4 +6,5 @@ tpx3_toolkit/viewer.py
 tpx3_toolkit.egg-info/PKG-INFO
 tpx3_toolkit.egg-info/SOURCES.txt
 tpx3_toolkit.egg-info/dependency_links.txt
+tpx3_toolkit.egg-info/requires.txt
 tpx3_toolkit.egg-info/top_level.txt
