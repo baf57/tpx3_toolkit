@@ -260,7 +260,9 @@ def parse_raw_file(inpFile: str) -> tuple[np.ndarray,np.ndarray]:
     return (tdc,pix)
 
 def simplesort(arr,row):
-    return arr[:,arr[row,:].argsort()]
+    # know that arr is almost sorted in all cases, so timsort should be faster
+    # than quicksort
+    return arr[:,arr[row,:].argsort(kind='stable')] 
 
 def beam_mask(pix:np.ndarray,beamLocations:list[Beam],\
     preserveSize:bool=False) -> np.ndarray:
@@ -307,8 +309,6 @@ def beam_mask(pix:np.ndarray,beamLocations:list[Beam],\
 def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=4,\
      numScans:int=5)->np.ndarray:
     '''
-    Left blank for now, this will need to be implemented later
-
     Parameters
     ----------
     pix: np.ndarray
@@ -590,8 +590,12 @@ def process_Coincidences(inpFile:str,calibrationFile:str,beamSs:list[Beam],\
     
 if __name__ == '__main__':
     import os
-    inpFile = os.path.dirname(os.path.realpath(__file__)) + \
-              r'/examples/demo_file.tpx3' #example file
-    tdc,pix = parse_raw_file(inpFile)
-    print(f"TDC data: {tdc}")
-    print(f"Pix data: {pix}")
+    import cProfile
+    #inpFile = os.path.dirname(os.path.realpath(__file__)) + \
+    #          r'/examples/demo_file.tpx3' #example file
+    #(tdc,pix) = parse_raw_file(inpFile)
+    #print(f"TDC data: {tdc}")
+    #print(f"Pix data: {pix}")
+    inpFile = '/home/brayden/Documents/Graduate/Lab/Quantum Imaging/Data/04-25-2023/momentum_000013_Optimal.tpx3'
+    cProfile.run('parse_raw_file(inpFile)',sort='tottime')
+    cProfile.run('process_Coincidences(inpFile)') # finish this line
