@@ -39,3 +39,18 @@ fn rust_parse(_py: Python, m: &PyModule) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(parse, m)?)?;
     Ok(())
 }
+
+/* How to use
+
+CLI:
+% cd src
+% maturin develop
+
+Current Python code to test this with:
+import rust_parse
+
+inpFile = '/home/brayden/Programs/my_git_dirs/tpx3_toolkit/tpx3_toolkit/examples/demo_file.tpx3'
+
+size = rust_parse.parse(inpFile)
+ 
+*/
