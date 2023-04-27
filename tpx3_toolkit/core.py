@@ -339,8 +339,9 @@ def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=
     # Currently the same as Guillaume's code until I make my own. #
     ###############################################################
     pix = simplesort(pix,2)
-    times = []
+#    times = []
 #    t00 = time.time()
+    pixprev = 0
     for scan in range(numScans):
         for offset in range(1,clusterRange):
 #            t0 = time.time()
@@ -383,6 +384,10 @@ def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=
             # Throw away elments within identified clusters which are not centroids
             pix = pix[:,mask]
 
+        if pixprev == pix.shape[1]: # convergence check
+            break
+        pixprev = pix.shape[1]
+        
 #            t1 = time.time()
 #            times.append(t1-t0)
     
@@ -590,12 +595,16 @@ def process_Coincidences(inpFile:str,calibrationFile:str,beamSs:list[Beam],\
     
 if __name__ == '__main__':
     import os
-    import cProfile
+    import functiontrace
     #inpFile = os.path.dirname(os.path.realpath(__file__)) + \
     #          r'/examples/demo_file.tpx3' #example file
     #(tdc,pix) = parse_raw_file(inpFile)
     #print(f"TDC data: {tdc}")
     #print(f"Pix data: {pix}")
-    inpFile = '/home/brayden/Documents/Graduate/Lab/Quantum Imaging/Data/04-25-2023/momentum_000013_Optimal.tpx3'
-    cProfile.run('parse_raw_file(inpFile)',sort='tottime')
-    cProfile.run('process_Coincidences(inpFile)') # finish this line
+    inpFile = '/home/brayden/Documents/Education/Graduate/Lab/Quantum Imaging/Data/04-25-2023/momentum_000013_Optimal.tpx3'
+    calibFile = '/home/brayden/Programs/my_git_dirs/tpx3_toolkit/TOT correction curve new firmware GST.txt'
+    #(tdc,pix) = parse_raw_file(inpFile)
+    functiontrace.trace()
+    process_Coincidences(inpFile, calibFile, [Beam(65, 57, 130, 188)], \
+        [Beam(130, 57, 195, 188)], 250, 20, 1000, 30, 20)
+    #cProfile.run('process_Coincidences(inpFile)') # finish this line
