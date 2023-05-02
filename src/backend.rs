@@ -1,4 +1,5 @@
 use std::fs::File;
+use std::time::Instant;
 use std::io::Read;
 
 pub fn i_parse(inp_file: &str) 
@@ -8,6 +9,7 @@ pub fn i_parse(inp_file: &str)
     Another idea is to sort the data as it is read from the file stream, which
     may cut down on time, but this is a future problem, and I will just
     reimplement the Python and NumPy code first. */
+    let now = Instant::now();
 
     let mut tdc: Vec<[f64;2]> = vec![]; // change types
     let pix: Vec<[f64;4]> = vec![];
@@ -56,6 +58,9 @@ pub fn i_parse(inp_file: &str)
             }
         }
     }
+
+    let elapsed = now.elapsed();
+    println!("Time inside Rust for i_parse: {:.2?}", elapsed);
 
     Ok((tdc,pix))
 }

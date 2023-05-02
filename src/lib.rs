@@ -8,7 +8,7 @@ fn parse(inp_file: &str) -> PyResult<(Vec<[f64;2]>, Vec<[f64;4]>)> {
     let pix: Vec<[f64;4]>;
 
     (tdc,pix) = i_parse(inp_file)?;
-
+    
     Ok((tdc,pix))
 }
 
