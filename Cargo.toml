@@ -8,5 +8,8 @@ edition = "2021"
 name = "rust_parse"
 crate-type = ["cdylib"]
 
+[profile.release]
+debug = true
+
 [dependencies]
 pyo3 = "0.18.1"

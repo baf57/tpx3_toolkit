@@ -219,8 +219,8 @@ def parse_raw_file(inpFile: str) -> tuple[np.ndarray,np.ndarray]:
 
     # TDC chunks parsing
     triggerCounter = (tdcChunks>>44) & 0xFFF # bits 44-55
-    timeStamp = ((tdcChunks>>9) & 0x7FFFFFFFF) * 3125e-3 # bits 9-43
-    stamp = ((tdcChunks>>5) & 0xF) * 260e-3 # bits 5-8
+    timeStamp = ((tdcChunks>>9) & 0x7FFFFFFFF) # bits 9-43
+    stamp = ((tdcChunks>>5) & 0xF) # bits 5-8
 
     # _tdc accounts for the endianness, but is really slow to use
     _tdc = np.zeros(tdcChunks.size,dtype=TdcDataType.dt)
