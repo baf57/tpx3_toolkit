@@ -4,6 +4,7 @@ use std::io::Read;
 
 pub fn i_parse(inp_file: &str) 
                         -> Result<(Vec<[f64;2]>, Vec<[f64;4]>),std::io::Error> {
+                            // switch outputs to [Vec<f64>; n]
     /* The idea is to read the file line by line, and on each line which is of
     one of the two correct types, to process the data. 
     Another idea is to sort the data as it is read from the file stream, which
@@ -22,11 +23,19 @@ pub fn i_parse(inp_file: &str)
 
     let tdc_byte: u8 = 0x6;
     let pix_byte: u8 = 0xB; 
+
     let mut tdc_buffer: u64; 
-    let mut pix_buffer: u64; 
     let mut trigger_counter: u16;
     let mut time_stamp: u32;
     let mut stamp: u8;
+
+    let mut pix_buffer: u64; 
+//    let mut dcol: u8;
+//    let mut spix: u8;
+//    let mut pix_raw: u8;
+//    let mut toA: u16;
+//    let mut fToA: u16;
+//    let mut spidr_time: u16;
 
     /* iterate over all the bytes. If the current byte is the end of a word, 
     then check for the byte type. If it is 0x6 then parse like TDC, if it is 0xB
