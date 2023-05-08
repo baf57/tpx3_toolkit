@@ -20,8 +20,8 @@ pub fn i_parse(inp_file: &str)
 
     f.read_to_end(&mut buffer)?; // read file to buffer
 
-    let tdc_byte: u8 = 0x6;
-    let pix_byte: u8 = 0xB; 
+    let tdc_byte: u8 = 0x60;
+    let pix_byte: u8 = 0xB0; 
 
     let mut tdc_buffer: u64; 
     let mut trigger_counter: u16;
@@ -42,7 +42,7 @@ pub fn i_parse(inp_file: &str)
     then parse like pix. Otherwise ignore it. */
     for (i, byte) in buffer.iter().enumerate(){
         if i%8 == 7 { // end of word
-            if (byte&0b00001111) == tdc_byte{
+            if (byte&0b11110000) == tdc_byte{
                 tdc_buffer = 0;
                 for (j, ent) in buffer[i-7..i+1].iter().enumerate(){ // recreate word
                     tdc_buffer += (*ent as u64) << (8 * j);
@@ -57,7 +57,7 @@ pub fn i_parse(inp_file: &str)
                 tdc[1].push((stamp as f64 * 260e-3) +
                             (time_stamp as f64 * 3125e-3)); //wrong
             }
-            else if (byte&0b00001111) == pix_byte{
+            else if (byte&0b11110000) == pix_byte{
                 pix_buffer = 0;
                 for (j,ent) in buffer[i-7..i+1].iter().enumerate(){
                     pix_buffer += (*ent as u64) << (8 * j);
