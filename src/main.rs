@@ -2,8 +2,8 @@ use backend::i_parse;
 pub mod backend;
 
 fn main(){
-    let tdc: [Vec<f64>;2];
-    let pix: [Vec<f64>;4];
+    let tdc: Vec<Vec<f64>>;
+    let pix: Vec<Vec<f64>>;
     //let inp_file = "/home/brayden/Documents/Education/Graduate/Lab/Quantum Imaging/Data/04-25-2023/momentum_000013_Optimal.tpx3";
     let inp_file = "/home/brayden/Programs/my_git_dirs/tpx3_toolkit/tpx3_toolkit/examples/demo_file.tpx3";
 

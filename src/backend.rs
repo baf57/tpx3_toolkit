@@ -28,13 +28,13 @@ pub fn i_parse(inp_file: &str)
     let mut time_stamp: u32;
     let mut stamp: u8;
 
-    let mut pix_buffer: u64; 
-    let mut dcol: u8;
-    let mut spix: u8;
+    let mut pix_buffer: u64;
+    let mut d_col: u8;
+    let mut s_pix: u8;
     let mut pix_raw: u8;
-    let mut toA: u16;
-    let mut toT: u16;
-    let mut fToA: u16;
+    let mut t_o_a: u16;
+    let mut t_o_t: u16;
+    let mut f_t_o_a: u16;
     let mut spidr_time: u16;
 
     /* iterate over all the bytes. If the current byte is the end of a word, 
@@ -44,11 +44,10 @@ pub fn i_parse(inp_file: &str)
         if i%8 == 7 { // end of word
             if (byte&0b00001111) == tdc_byte{
                 tdc_buffer = 0;
-                for ent in buffer[i-7..i+1].iter(){
-                    tdc_buffer <<= 8;
-                    tdc_buffer += *ent as u64;
+                for (j, ent) in buffer[i-7..i+1].iter().enumerate(){ // recreate word
+                    tdc_buffer += (*ent as u64) << (8 * j);
                 }
-                // note that as clips the value
+                // note that "as" clips the value
                 // these masks below are all wonky, but it's what the devs use
                 trigger_counter = ((tdc_buffer>>44) & 0xFFF) as u16;
                 time_stamp = ((tdc_buffer>>9) & 0x7FFFFFFFF) as u32;
@@ -56,33 +55,33 @@ pub fn i_parse(inp_file: &str)
                 
                 tdc[0].push(trigger_counter as f64);
                 tdc[1].push((stamp as f64 * 260e-3) +
-                            (time_stamp as f64 * 3125e-3));
+                            (time_stamp as f64 * 3125e-3)); //wrong
             }
             else if (byte&0b00001111) == pix_byte{
                 pix_buffer = 0;
-                for ent in buffer[i-7..i+1].iter(){
-                    pix_buffer <<= 8;
-                    pix_buffer += *ent as u64;
+                for (j,ent) in buffer[i-7..i+1].iter().enumerate(){
+                    pix_buffer += (*ent as u64) << (8 * j);
                 }
-                dcol = ((pix_buffer>>53) & 0x7F) as u8;
-                spix = ((pix_buffer>>47) & 0x3F) as u8; 
+                d_col = ((pix_buffer>>53) & 0x7F) as u8;
+                s_pix = ((pix_buffer>>47) & 0x3F) as u8; 
                 pix_raw = ((pix_buffer>>44) & 0x7) as u8;
-                toA = ((pix_buffer>>30) & 0x3FFF) as u16;
-                toT = ((pix_buffer>>20) & 0x3FF) as u16;
-                fToA = ((pix_buffer>>16) & 0xF) as u16;
+                t_o_a = ((pix_buffer>>30) & 0x3FFF) as u16;
+                t_o_t = ((pix_buffer>>20) & 0x3FF) as u16;
+                f_t_o_a = ((pix_buffer>>16) & 0xF) as u16;
                 spidr_time = (pix_buffer & 0xFFFF) as u16;
 
-                pix[0].push(((dcol<<1) as f64) + ((pix_raw/4) as f64));
-                pix[1].push(((spix<<2) as f64) + ((pix_raw & 0xF) as f64));
+                pix[0].push(((d_col<<1) as f64) + ((pix_raw/4) as f64));
+                pix[1].push(((s_pix<<2) as f64) + ((pix_raw & 0xF) as f64));
                 pix[2].push(((spidr_time as f64) * 25.0 * 16384.0) + 
-                            ((((toA<<4) | (fToA & 0xF)) as f64) * (25.0/16.0)));
-                pix[3].push((toT as f64) * 25.0)
+                            ((((t_o_a<<4) | (f_t_o_a & 0xF)) as f64) * (25.0/16.0))); //wrong
+                pix[3].push((t_o_t as f64) * 25.0);
             }
         }
     }
 
     let elapsed = now.elapsed();
     println!("Time inside Rust for i_parse: {:.2?}", elapsed);
+    println!("Size of pix: {}, of tdc: {}", pix[0].len(), tdc[0].len());
 
     Ok((tdc,pix))
 }

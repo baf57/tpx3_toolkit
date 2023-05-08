@@ -1,5 +1,5 @@
 use backend::i_parse;
-use numpy::{PyArray1, PyArray2, ToPyArray};
+use numpy::PyArray2;
 use pyo3::prelude::*;
 pub mod backend;
 
@@ -12,7 +12,7 @@ fn rust_parse(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
         let (tdc,pix) = i_parse(inp_file)?;
         
-        Ok((tdc.to_pyarray(py),pix.to_pyarray(py)))
+        Ok((PyArray2::from_vec2(py, &tdc).unwrap(), PyArray2::from_vec2(py, &pix).unwrap()))
     }
 
 //    #[pyfn(m)]
