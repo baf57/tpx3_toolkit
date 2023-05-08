@@ -8,32 +8,32 @@ pub mod backend;
 #[pymodule]
 fn rust_parse(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     #[pyfn(m)]
-    fn parse(inp_file: &str, tdc: &PyArray2<f64>, pix: &PyArray2<f64>) -> PyResult<()> {
+    fn parse<'py>(py:Python<'py>, inp_file: &str) -> PyResult<(&'py PyArray2<f64>,&'py PyArray2<f64>)> {
 
-        //(tdc,pix) = i_parse(inp_file)?;
+        let (tdc,pix) = i_parse(inp_file)?;
         
-        Ok(())
+        Ok((tdc.to_pyarray(py),pix.to_pyarray(py)))
     }
 
-    #[pyfn(m)]
-    fn alloc_test_in<'py>(py:Python<'py>, size: usize) -> PyResult<&PyArray2<f64>>{ // memory managed by Python so safe
-        //let out: Vec<f64> = vec![0.0; size];
-
-       //Ok(out.to_pyarray(py))
-       Ok(PyArray2::<f64>::zeros(py, [size, size], false))
-    }
-
-    #[pyfn(m)]
-    fn alloc_test_combo(size: usize) -> PyResult<Vec<Vec<f64>>>{ // memory managed by Python so safe
-        let out: Vec<Vec<f64>> = vec![vec![0.0; size]; size];
-
-       Ok(out)
-    }
-
-    #[pyfn(m)]
-    fn alloc_test_out(_val: &PyArray2<f64>) -> PyResult<()>{
-        Ok(())
-    }
+//    #[pyfn(m)]
+//    fn alloc_test_in<'py>(py:Python<'py>, size: usize) -> PyResult<&PyArray2<f64>>{ // memory managed by Python so safe
+//        //let out: Vec<f64> = vec![0.0; size];
+//
+//       //Ok(out.to_pyarray(py))
+//       Ok(PyArray2::<f64>::zeros(py, [size, size], false))
+//    }
+//
+//    #[pyfn(m)]
+//    fn alloc_test_combo(size: usize) -> PyResult<Vec<Vec<f64>>>{ // memory managed by Python so safe
+//        let out: Vec<Vec<f64>> = vec![vec![0.0; size]; size];
+//
+//       Ok(out)
+//    }
+//
+//    #[pyfn(m)]
+//    fn alloc_test_out(_val: &PyArray2<f64>) -> PyResult<()>{
+//        Ok(())
+//    }
 
     Ok(())
 }
