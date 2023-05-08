@@ -213,7 +213,7 @@ def parse_raw_file(inpFile: str) -> tuple[np.ndarray,np.ndarray]:
                 print(f"The file {inpFile} is not of the proper format")
 
 
-    chunkType = (tpx3_raw>>56) & 0xF
+    chunkType = (tpx3_raw>>60) & 0xF
     tdcChunks = tpx3_raw[chunkType == 0x6]
     pixChunks = tpx3_raw[chunkType == 0xB]
 
