@@ -30,7 +30,7 @@ def plot_hits(pix:np.ndarray,colorMap:str='viridis',fig:Figure=None) -> Figure: 
 def make_hits_axes(pix:np.ndarray,ax:Axes,colorMap:str='viridis') -> None:
 
     CCD = np.zeros((256,256))
-    indices = (pix[1,:].astype('int'),pix[0,:].astype('int'))
+    indices = (pix[1,:].astype('int'),255-pix[0,:].astype('int'))
     np.add.at(CCD,indices,1) # adds 1 to the CCD value at each hit's (x,y)
 
     np.add.at(CCD,(150,50),500)
@@ -43,7 +43,7 @@ def make_hits_axes(pix:np.ndarray,ax:Axes,colorMap:str='viridis') -> None:
 
     cutoff = np.max(CCD) * 0.2
 
-    ax.imshow(CCD,origin='lower',aspect='auto',extent=[0,256,0,256],\
+    ax.imshow(CCD,origin='upper',aspect='auto',extent=[0,256,0,256],\
         vmax=cutoff,interpolation='none',cmap=cmap) #type:ignore
 
 def draw_beam_box(ax:Axes,beams:list[Beam],boxColors:list[str]=[]) \
