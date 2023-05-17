@@ -30,7 +30,9 @@ def plot_hits(pix:np.ndarray,colorMap:str='viridis',fig:Figure=None) -> Figure: 
 def make_hits_axes(pix:np.ndarray,ax:Axes,colorMap:str='viridis') -> None:
 
     CCD = np.zeros((256,256))
-    indices = (pix[1,:].astype('int'),255-pix[0,:].astype('int'))
+    print(pix[0,345:])
+    print(pix[0,888:])
+    indices = (pix[1,:].astype('int'),pix[0,:].astype('int'))
     np.add.at(CCD,indices,1) # adds 1 to the CCD value at each hit's (x,y)
 
     np.add.at(CCD,(150,50),500)
@@ -186,7 +188,7 @@ def _make_coincidences_axis(pix:np.ndarray,ax:Axes,\
     else:
         cmap.set_bad(cmap(0)) #type: ignore
 
-    ax.imshow(view,origin='lower',aspect='auto',extent=[0,xrange,0,yrange],\
+    ax.imshow(view,origin='upper',aspect='auto',extent=[0,xrange,0,yrange],\
         interpolation='none',cmap=cmap)
 
     return view
