@@ -1,15 +1,14 @@
-import rust_parse
 import tpx3_toolkit as t3
 import numpy as np
 import time
 
-#inpFile = '/home/brayden/Documents/Education/Graduate/Lab/Quantum Imaging/Data/04-25-2023/momentum_000013_Optimal.tpx3'
-inpFile = '/home/brayden/Programs/my_git_dirs/tpx3_toolkit/tpx3_toolkit/examples/demo_file.tpx3'
+inpFile = '/home/brayden/Documents/Education/Graduate/Lab/Quantum Imaging/Data/04-25-2023/momentum_000013_Optimal.tpx3'
+#inpFile = '/home/brayden/Programs/my_git_dirs/tpx3_toolkit/tpx3_toolkit/examples/demo_file.tpx3'
 
 size = 10**4
 
 t0r = time.time()
-(tdc, pix) = rust_parse.parse(inpFile)
+(tdc, pix) = t3.parse(inpFile)
 #tdc = np.array(tdc).transpose()
 #pix = np.array(pix).transpose()
 #outi = rust_parse.alloc_test_in(size)

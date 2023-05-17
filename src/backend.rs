@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::time::Instant;
+//use std::time::Instant;
 use std::io::Read;
 
 pub fn i_parse(inp_file: &str) 
@@ -9,7 +9,7 @@ pub fn i_parse(inp_file: &str)
     Another idea is to sort the data as it is read from the file stream, which
     may cut down on time, but this is a future problem, and I will just
     reimplement the Python and NumPy code first. */
-    let now = Instant::now();
+    //let now = Instant::now();
 
     let mut tdc: Vec<Vec<f64>> = vec![vec![],vec![]];
     let mut pix: Vec<Vec<f64>> = vec![vec![],vec![],vec![],vec![]];
@@ -69,19 +69,28 @@ pub fn i_parse(inp_file: &str)
                 t_o_t = ((pix_buffer>>20) & 0x3FF) as u16;
                 f_t_o_a = ((pix_buffer>>16) & 0xF) as u16;
                 spidr_time = (pix_buffer & 0xFFFF) as u16;
+                //let tftoa = (t_o_a<<4) | (!f_t_o_a & 0xF);
+                //println!("rust:");
+                //println!("\ttoa: {t_o_a}");
+                //println!("\ttot: {t_o_t}");
+                //println!("\tftoa: {tftoa:04b}");
+                //println!("\tspidr: {spidr_time}");
 
                 pix[0].push(((d_col<<1) as f64) + ((pix_raw/4) as f64));
-                pix[1].push(((s_pix<<2) as f64) + ((pix_raw & 0xF) as f64));
+                pix[1].push(((s_pix<<2) as f64) + ((pix_raw & 0x3) as f64));
                 pix[2].push(((spidr_time as f64) * 25.0 * 16384.0) + 
-                            ((((t_o_a<<4) | (f_t_o_a & 0xF)) as f64) * (25.0/16.0))); //wrong
+                            ((((t_o_a<<4) | (!f_t_o_a & 0xF)) as f64) * (25.0/16.0))); //wrong
                 pix[3].push((t_o_t as f64) * 25.0);
+
+                //println!("r: {i:x}: {pix_buffer:064b}");
+                //break;
             }
         }
     }
 
-    let elapsed = now.elapsed();
-    println!("Time inside Rust for i_parse: {:.2?}", elapsed);
-    println!("Size of pix: {}, of tdc: {}", pix[0].len(), tdc[0].len());
+    //let elapsed = now.elapsed();
+    //println!("Time inside Rust for i_parse: {:.2?}", elapsed);
+    //println!("Size of pix: {}, of tdc: {}", pix[0].len(), tdc[0].len());
 
     Ok((tdc,pix))
 }
