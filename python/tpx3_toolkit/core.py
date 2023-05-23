@@ -1,5 +1,5 @@
 import numpy as np
-from .rust_parse import parse
+from .rust_parse import parse # "." needed to reference local compiled lib
 from scipy.optimize import curve_fit
 import time
 

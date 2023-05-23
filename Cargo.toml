@@ -9,8 +9,8 @@ edition = "2021"
 name = "tpx3_toolkit"
 crate-type = ["cdylib"]
 
-[profile.release]
-#debug = true
+#[profile.release]
+#debug = true #uncomment if debug/profiling output from rust is needed
 
 [dependencies]
 pyo3 =  {version = "0.18.1", features = ["extension-module"]}

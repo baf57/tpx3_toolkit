@@ -75,7 +75,8 @@ pub fn i_parse(inp_file: &str)
                 //println!("\ttot: {t_o_t}");
                 //println!("\tftoa: {tftoa:04b}");
                 //println!("\tspidr: {spidr_time}");
-
+                
+                // Axis need to be mirrored to reflect the actual camera orientation in lab frame
                 pix[0].push(255.0 - (((s_pix<<2) as f64) + ((pix_raw & 0x3) as f64)));
                 pix[1].push(255.0 - (((d_col<<1) as f64) + ((pix_raw/4) as f64)));
                 pix[2].push(((spidr_time as f64) * 25.0 * 16384.0) + 
