@@ -45,7 +45,7 @@ def make_hits_axes(pix:np.ndarray,ax:Axes,colorMap:str='viridis') -> None:
 
     cutoff = np.max(CCD) * 0.2
 
-    ax.imshow(CCD,origin='upper',aspect='auto',extent=[0,256,0,256],\
+    ax.imshow(CCD,origin='lower',aspect='auto',extent=[0,256,0,256],\
         vmax=cutoff,interpolation='none',cmap=cmap) #type:ignore
 
 def draw_beam_box(ax:Axes,beams:list[Beam],boxColors:list[str]=[]) \

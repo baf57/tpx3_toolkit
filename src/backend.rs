@@ -76,8 +76,8 @@ pub fn i_parse(inp_file: &str)
                 //println!("\tftoa: {tftoa:04b}");
                 //println!("\tspidr: {spidr_time}");
 
-                pix[0].push(255.0 - (((d_col<<1) as f64) + ((pix_raw/4) as f64)));
-                pix[1].push(((s_pix<<2) as f64) + ((pix_raw & 0x3) as f64));
+                pix[0].push(255.0 - (((s_pix<<2) as f64) + ((pix_raw & 0x3) as f64)));
+                pix[1].push(255.0 - (((d_col<<1) as f64) + ((pix_raw/4) as f64)));
                 pix[2].push(((spidr_time as f64) * 25.0 * 16384.0) + 
                             ((((t_o_a<<4) | (!f_t_o_a & 0xF)) as f64) * (25.0/16.0))); //wrong
                 pix[3].push((t_o_t as f64) * 25.0);
