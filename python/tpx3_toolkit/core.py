@@ -598,7 +598,7 @@ def process_Coincidences(inpFile:str,calibrationFile:str,beamSs:list[Beam],\
 
     pix = correct_ToA(pix,calibrationFile)
 
-    coincidences = find_coincidences(pix,[beamIs,beamSs],coincidenceTimeWindow)
+    coincidences = find_coincidences(pix,[beamSs,beamIs],coincidenceTimeWindow)
 
     return coincidences
     

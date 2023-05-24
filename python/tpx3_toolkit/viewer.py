@@ -188,7 +188,7 @@ def _make_coincidences_axis(pix:np.ndarray,ax:Axes,\
     else:
         cmap.set_bad(cmap(0)) #type: ignore
 
-    ax.imshow(view,origin='upper',aspect='auto',extent=[0,xrange,0,yrange],\
+    ax.imshow(view,origin='lower',aspect='auto',extent=[0,xrange,0,yrange],\
         interpolation='none',cmap=cmap)
 
     return view
