@@ -30,8 +30,6 @@ def plot_hits(pix:np.ndarray,colorMap:str='viridis',fig:Figure=None) -> Figure: 
 def make_hits_axes(pix:np.ndarray,ax:Axes,colorMap:str='viridis') -> None:
 
     CCD = np.zeros((256,256))
-    print(pix[0,345:])
-    print(pix[0,888:])
     indices = (pix[1,:].astype('int'),pix[0,:].astype('int'))
     np.add.at(CCD,indices,1) # adds 1 to the CCD value at each hit's (x,y)
 
