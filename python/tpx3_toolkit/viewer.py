@@ -113,7 +113,7 @@ def plot_correlations(coincidences:np.ndarray,colorMap:str="gray", \
 
 
 def plot_histogram(coincidences:np.ndarray, min_bin=-200, max_bin=200,\
-                   fig:Figure=None) -> Figure:
+                   color='r', fig:Figure=None) -> Figure:
     if fig is None:
         fig = plt.figure(figsize=(4,8))
         ax = fig.add_axes([0,0,1,1])
@@ -127,7 +127,7 @@ def plot_histogram(coincidences:np.ndarray, min_bin=-200, max_bin=200,\
     # get difference between signal and idler arrival times
     dt = coincidences[1,2,:] - coincidences[0,2,:]
 
-    ax.hist(dt,bins,color='r')
+    ax.hist(dt,bins,color=color)
 
     return fig
 
@@ -148,7 +148,7 @@ def plot_coincidence_trace(pix:np.ndarray, loc:int, orientation:str,
     ax.set_ylabel(f'Count')
     ax.set_xlim(min_loc, max_loc)
 
-    if orientation == 'x':
+    if orientation == 'y':
         data = view[:,loc]
     else:
         data = view[loc,:]
@@ -157,7 +157,8 @@ def plot_coincidence_trace(pix:np.ndarray, loc:int, orientation:str,
 
     return (fig,data,view)
 
-def plot_coincidence_xy(correlations:np.ndarray, sign:int=1, fig:Figure=None)\
+def plot_coincidence_xy(correlations:np.ndarray, sign:int=1, \
+                        colorMap:str='viridis', fig:Figure=None)\
                                                    -> tuple[Figure,np.ndarray]:
     if fig is None:
         fig = plt.figure(figsize=(4,8))
@@ -166,7 +167,7 @@ def plot_coincidence_xy(correlations:np.ndarray, sign:int=1, fig:Figure=None)\
         ax = fig.gca()
 
     data = correlations[0,:,:] + (sign/np.abs(sign)) * correlations[1,:,:]
-    view = _make_coincidences_axis(data,ax)
+    view = _make_coincidences_axis(data,ax,colorMap)
 
     ax.set_xlabel(r'$x_{idl} + x_{sig}$')
     ax.set_ylabel(r'$y_{idl} + y_{sig}$')
