@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 from .rust_parse import _parse
 from scipy.optimize import curve_fit
@@ -104,7 +105,10 @@ def parse_raw_file(inpFile: str) -> tuple[np.ndarray,np.ndarray]:
 def simplesort(arr,row):
     # know that arr is almost sorted in all cases, so timsort should be faster
     # than quicksort
-    return arr[:,arr[row,:].argsort(kind="stable")] 
+    if type(arr) == "torch.Tensor":
+        return arr[:,arr[row,:].argsort(stable=True)]
+    else:
+        return arr[:,arr[row,:].argsort(kind="stable")] 
 
 def beam_mask(pix:np.ndarray,beamLocations:list[Beam],\
     preserveSize:bool=False) -> np.ndarray:
@@ -177,11 +181,14 @@ def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=
         now correspond to single photon events rather than the avalanched photon
         events as in the input array.
     '''
-    ###############################################################
-    # Currently the same as Guillaume's code until I make my own. #
-    ###############################################################
-    import torch
-    pix = torch.from_numpy(simplesort(pix,2))
+    # paralellization with PyTorch
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+    else:
+        device = torch.device("cpu")
+    pix = torch.from_numpy(pix).to(device)
+    
+    pix = simplesort(pix,2)
 #    times = []
 #    t00 = time.time()
     pixprev = 0
@@ -189,7 +196,7 @@ def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=
         for offset in range(1,clusterRange):
 #            t0 = time.time()
 
-            mask = torch.full((pix.size()[1],), True)
+            mask = torch.full((pix.size()[1],), True).to(device)
             largerToT_mask = torch.logical_not(mask)
             old_centroids = torch.logical_not(mask)
             new_centroids = torch.logical_not(mask)
