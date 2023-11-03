@@ -411,9 +411,9 @@ def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=
 #    print(f"Thus, the loop-based python overhead is {(t11-t00)-sum(times)} s.")
     return pix
 
-def correct_ToA(pix:np.ndarray,calibrationFile:str) -> np.ndarray:
+def correct_ToT(pix:np.ndarray,calibrationFile:str) -> np.ndarray:
     '''
-    Performs the time of arrival (ToA) correction using a calibration file.
+    Performs the time of threshold (ToT) correction using a calibration file.
     
     Parameters
     ----------
@@ -596,7 +596,7 @@ def process_Coincidences(inpFile:str,calibrationFile:str,beamSs:list[Beam],\
     else:
         pix = clustering(pix,timeWindow,spaceWindow,clusterRange,numScans)
 
-    pix = correct_ToA(pix,calibrationFile)
+    pix = correct_ToT(pix,calibrationFile)
 
     coincidences = find_coincidences(pix,[beamSs,beamIs],coincidenceTimeWindow)
 

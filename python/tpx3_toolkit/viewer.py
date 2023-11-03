@@ -175,7 +175,7 @@ def plot_coincidence_xy(correlations:np.ndarray, sign:int=1, \
     return (fig,view)
 
 def _make_coincidences_axis(pix:np.ndarray,ax:Axes,\
-                           colorMap:str='viridis') -> None:
+                           colorMap:str='viridis') -> np.ndarray:
     (view,xrange,yrange) = _make_view(pix)
 
     if type(colorMap) is str:
