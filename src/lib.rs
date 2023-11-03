@@ -8,7 +8,7 @@ pub mod backend;
 #[pymodule]
 fn rust_parse(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     #[pyfn(m)]
-    fn parse<'py>(py:Python<'py>, inp_file: &str) -> PyResult<(&'py PyArray2<f64>,&'py PyArray2<f64>)> {
+    fn _parse<'py>(py:Python<'py>, inp_file: &str) -> PyResult<(&'py PyArray2<f64>,&'py PyArray2<f64>)> {
 
         let (tdc,pix) = i_parse(inp_file)?;
         

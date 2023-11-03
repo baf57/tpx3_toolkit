@@ -1,5 +1,5 @@
 import numpy as np
-from .rust_parse import parse # "." needed to reference local compiled lib
+from rust_parse import _parse
 from scipy.optimize import curve_fit
 import time
 
@@ -42,99 +42,235 @@ class Beam:
         return f'[{self.left}, {self.bottom}, {self.right}, {self.top}]'
     
 
-class DataTypeManager:
-    '''
-    Abstract class for the DataType classes to inherent from.
-    '''
-    dtBig: np.dtype
-    dtLittle: np.dtype
-    dt: np.dtype
-    zero = (0,0,0,0)
-
-    @classmethod
-    def setEndianness(cls,endianness:str):
-        if endianness == '<' or endianness == 'little' or endianness == 'Little':
-            cls.dt = cls.dtLittle
-        elif endianness == '>' or endianness == 'big' or endianness == 'Big':
-            cls.dt = cls.dtBig
-        else:
-            raise KeyError(f"Endianness '{endianness}' not known. Valid options\
-            are '<','little','Little','>','big', or 'Big'.")
-
-
-class PixDataType(DataTypeManager):
-    '''
-    Keeps track of the pix data type.
-
-    Attributes
-    ----------
-    dt: np.dtype
-        The currently set data type for pix chunk data.
-    dtBig: np.dtype
-        The big endian version of the pix data type.
-    dtLittle: np.dtype
-        The little endian version of the pix data type.
-    zero: tuple
-        The zero value for the pix data type. `(0,0,0,0)`.
-
-    Methods
-    -------
-    setEndianness(endianness:str)
-        Changes dt to dtBig or dtLittle depending on the value of endianness.
-
-        Parameters
-        ----------
-        endianness: str
-            The type of endianness to set the dtypes to. Valid values are:
-                '<', 'little', 'Little', '>', 'big', 'Big'
-    
-    Notes
-    -----
-    See the docstring for `parse_raw_file` for more information about the
-    specific meanings of each dtype field.
-    '''
-    dtBig = np.dtype([("X",">B"),("Y",">B"),("ToA",">d"),("ToT",">d")])
-    dtLittle = np.dtype([("X","<B"),("Y","<B"),("ToA","<d"),("ToT","<d")])
-    dt = dtLittle
-
-class TdcDataType(DataTypeManager):
-    '''
-    Keeps track of the TDC data type.
-
-    Attributes
-    ----------
-    dt: np.dtype
-        The currently set data type for TDC chunk data.
-    dtBig: np.dtype
-        The big endian version of the TDC data type.
-    dtLittle: np.dtype
-        The little endian version of the TDC data type.
-    zero: tuple
-        The zero value for the pix data type. `(0,0,0,0)`.
-
-
-    Methods
-    -------
-    setEndianness(endianness:str)
-        Changes `dt` to `dtBig` or `dtLittle` depending on the value of
-        `endianness`.
-
-        Parameters
-        ----------
-        endianness: str
-            The type of endianness to set the dtypes to. Valid values are:
-                '<', 'little', 'Little', '>', 'big', 'Big'
-
-    Notes
-    -----
-    See the docstring for `parse_raw_file` for more information about the
-    specific meanings of each dtype field.
-    '''
-    dtBig = np.dtype([("TriggerCounter",'>H'),("Timestamp",">d")])
-    dtLittle = np.dtype([("TriggerCounter",'<H'),("Timestamp","<d")])
-    dt = dtLittle
+#class DataTypeManager:
+#    '''
+#    DEPRECIATED - unneeded after rust backend added
+#    Abstract class for the DataType classes to inherent from.
+#    '''
+#    dtBig: np.dtype
+#    dtLittle: np.dtype
+#    dt: np.dtype
+#    zero = (0,0,0,0)
+#
+#    @classmethod
+#    def setEndianness(cls,endianness:str):
+#        if endianness == '<' or endianness == 'little' or endianness == 'Little':
+#            cls.dt = cls.dtLittle
+#        elif endianness == '>' or endianness == 'big' or endianness == 'Big':
+#            cls.dt = cls.dtBig
+#        else:
+#            raise KeyError(f"Endianness '{endianness}' not known. Valid options\
+#            are '<','little','Little','>','big', or 'Big'.")
+#
+#
+#class PixDataType(DataTypeManager):
+#    '''
+#    DEPRECIATED - unneeded after rust backend added
+#    Keeps track of the pix data type.
+#
+#    Attributes
+#    ----------
+#    dt: np.dtype
+#        The currently set data type for pix chunk data.
+#    dtBig: np.dtype
+#        The big endian version of the pix data type.
+#    dtLittle: np.dtype
+#        The little endian version of the pix data type.
+#    zero: tuple
+#        The zero value for the pix data type. `(0,0,0,0)`.
+#
+#    Methods
+#    -------
+#    setEndianness(endianness:str)
+#        Changes dt to dtBig or dtLittle depending on the value of endianness.
+#
+#        Parameters
+#        ----------
+#        endianness: str
+#            The type of endianness to set the dtypes to. Valid values are:
+#                '<', 'little', 'Little', '>', 'big', 'Big'
+#    
+#    Notes
+#    -----
+#    See the docstring for `parse_raw_file` for more information about the
+#    specific meanings of each dtype field.
+#    '''
+#    dtBig = np.dtype([("X",">B"),("Y",">B"),("ToA",">d"),("ToT",">d")])
+#    dtLittle = np.dtype([("X","<B"),("Y","<B"),("ToA","<d"),("ToT","<d")])
+#    dt = dtLittle
+#
+#class TdcDataType(DataTypeManager):
+#    '''
+#    DEPRECIATED - unneeded after rust backend added
+#    Keeps track of the TDC data type.
+#
+#    Attributes
+#    ----------
+#    dt: np.dtype
+#        The currently set data type for TDC chunk data.
+#    dtBig: np.dtype
+#        The big endian version of the TDC data type.
+#    dtLittle: np.dtype
+#        The little endian version of the TDC data type.
+#    zero: tuple
+#        The zero value for the pix data type. `(0,0,0,0)`.
+#
+#
+#    Methods
+#    -------
+#    setEndianness(endianness:str)
+#        Changes `dt` to `dtBig` or `dtLittle` depending on the value of
+#        `endianness`.
+#
+#        Parameters
+#        ----------
+#        endianness: str
+#            The type of endianness to set the dtypes to. Valid values are:
+#                '<', 'little', 'Little', '>', 'big', 'Big'
+#
+#    Notes
+#    -----
+#    See the docstring for `parse_raw_file` for more information about the
+#    specific meanings of each dtype field.
+#    '''
+#    dtBig = np.dtype([("TriggerCounter",'>H'),("Timestamp",">d")])
+#    dtLittle = np.dtype([("TriggerCounter",'<H'),("Timestamp","<d")])
+#    dt = dtLittle
 
 # functions
+#def parse_raw_file(inpFile: str) -> tuple[np.ndarray,np.ndarray]:
+#    ''' 
+#    DEPRECIATED, uses Rust backend now
+#    Parses the information contained within a '.tpx3' raw data file.
+#    
+#    Parameters
+#    ----------
+#    inpFile: string
+#        a string which describes the path to the '.tpx3' raw data file which is
+#        to be parsed.
+#
+#    Returns
+#    -------
+#    tdc: ndarray
+#        an array of the TDC data packets. Each entry is indexable by the
+#        following values:
+#            [0,:]: TriggerCounter (unitless)
+#                The number of times the trigger has been activated at the time
+#                of the TDC data acquisition.
+#            [1,:]: Timestamp (ns)
+#                The course time elapsed since the beginning of the data
+#                collection. Has a percision of 260 ps, and a maximum value of
+#                107.3741824 s.
+#    pix: ndarray
+#        an array of the Pixel data packets. Each entry is indexable by the
+#        following values:
+#            [0,:]: X (pixels)
+#                data column of the pixel address information.
+#            [1,:]: Y (pixels)
+#                data row of the pixel address information.
+#            [2,:]: ToA (ns)
+#                Time of arrival of particle. Percision of 1.5625 ns, maximum value
+#                of 26.853136 s.
+#            [3,:]: ToT (ns)
+#                Time of threshold. The amount of time it takes for the pixel to
+#                drop back below threshold value. Percision of 25 ns, maximum
+#                value of 25.575 us. 
+#
+#    Notes
+#    -----
+#        Since the endianess of the data is dependant on the architecture of the 
+#    machine which the '.tpx3' file is created on, and also the default endianess
+#    of a C data type is dependant on the machine this code is being run on, this
+#    function compensates for this issue internally and returns standardized data
+#    orientation in the output.
+#        As such, all binary operations which must be performed on the data are
+#    done within this function. Further, any unit setting operations are also
+#    done within this file to get the proper units reported above for the output
+#    data types. That means that there will be a slight discrepency between the
+#    packet descriptions given in the Amsterdam Scientific Instruments SERVAL
+#    manual in Chapter 6: Appendix: file formats, and the dtypes output here.
+#    Most of this discrepency is in the `pixaddr` data field as it requires some
+#    binary processing to extract the x-y coordinates of the Pix data chunk. This
+#    is also evident in the processing of all the fine and course times
+#    components.
+#    '''
+#    endianness = '<' # try little endianness first
+#    PixDataType.setEndianness(endianness)
+#    TdcDataType.setEndianness(endianness)
+#
+#    with open(inpFile, 'rb') as file:
+#        tpx3_raw = np.fromfile(file,dtype=endianness+"Q")
+#        try:
+#            endCheck = ((int(tpx3_raw[0]) & \
+#                0xFFFFFF)).to_bytes(3,"little").decode('utf-8')
+#            if endCheck != "TPX":
+#                endianness = '<'
+#                tpx3_raw = np.fromfile(file,dtype=endianness+"Q")
+#                PixDataType.setEndianness(endianness)
+#                TdcDataType.setEndianness(endianness)
+#        except:
+#            try:
+#                endianness = '<'
+#                tpx3_raw = np.fromfile(file,dtype=endianness+"Q")
+#                PixDataType.setEndianness(endianness)
+#                TdcDataType.setEndianness(endianness)
+#            except:
+#                print(f"The file {inpFile} is not of the proper format")
+#
+#
+#    chunkType = (tpx3_raw>>60) & 0xF
+#    tdcChunks = tpx3_raw[chunkType == 0x6]
+#    pixChunks = tpx3_raw[chunkType == 0xB]
+#    #print(f"p: {((np.nonzero(chunkType == 0xB)[0][0]+1)*8)-1:x}: {pixChunks[0]:b}")
+#
+#    # TDC chunks parsing
+#    triggerCounter = (tdcChunks>>44) & 0xFFF # bits 44-55
+#    timeStamp = ((tdcChunks>>9) & 0x7FFFFFFFF) # bits 9-43
+#    stamp = ((tdcChunks>>5) & 0xF) # bits 5-8
+#
+#    # _tdc accounts for the endianness, but is really slow to use
+#    _tdc = np.zeros(tdcChunks.size,dtype=TdcDataType.dt)
+#    _tdc["TriggerCounter"] = triggerCounter # (unitless)
+#    _tdc["Timestamp"] = (stamp * 260e-3) + (timeStamp * 3125e-3) # (ns)
+#
+#    # so I restructure them into an non-name-indexed array
+#    tdc = np.zeros((2,_tdc.size))
+#    tdc[0,:] = _tdc["TriggerCounter"]
+#    tdc[1,:] = _tdc["Timestamp"]
+#
+#    # pix chunks parsing
+#    dcol = (pixChunks>>53) & 0x7F # bits 53-59
+#    spix = (pixChunks>>47) & 0x3F # bits 47-52
+#    pixRaw = (pixChunks>>44) & 0x7 # bits 44-46
+#    toA = (pixChunks>>30) & 0x3FFF # bits 30-43
+#    toT = (pixChunks>>20) & 0x3FF # bits 20-29
+#    fToA = (pixChunks>>16) & 0xF # bits 16-19
+#    spidrTime = pixChunks & 0xFFFF # btis 0-15
+#
+#    #print("python:")
+#    #print(f"\ttoa: {toA[0]}")
+#    #print(f"\ttot: {toT[0]}")
+#    #print(f"\tftoa: {((toA<<4) | (~fToA & 0xF))[0]:b}")
+#    #print(f"\tspidr: {spidrTime[0]}")
+#
+#    cToA = ((toA<<4) | (~fToA & 0xF)) * (25/16)
+#
+#    # _pix accounts for the endianness, but is really slow to use
+#    _pix = np.zeros(pixChunks.size,dtype=PixDataType.dt)
+#    _pix["X"] = (dcol<<1) + (pixRaw // 4) # (pixels)
+#    _pix["Y"] = (spix<<2) + (pixRaw & 0x3) # (pixels)
+#    _pix["ToA"] = (spidrTime * 25 * 16384) + cToA # (ns)
+#    _pix["ToT"] = toT * 25 # (ns)
+#
+#    # so I restructure them into an non-name-indexed array
+#    pix = np.zeros((4,_pix.size))
+#    pix[0,:] = _pix["X"]
+#    pix[1,:] = _pix["Y"]
+#    pix[2,:] = _pix["ToA"]
+#    pix[3,:] = _pix["ToT"]
+#
+#    return (tdc,pix)
+
 def parse_raw_file(inpFile: str) -> tuple[np.ndarray,np.ndarray]:
     ''' 
     Parses the information contained within a '.tpx3' raw data file.
@@ -190,82 +326,7 @@ def parse_raw_file(inpFile: str) -> tuple[np.ndarray,np.ndarray]:
     is also evident in the processing of all the fine and course times
     components.
     '''
-    endianness = '<' # try little endianness first
-    PixDataType.setEndianness(endianness)
-    TdcDataType.setEndianness(endianness)
-
-    with open(inpFile, 'rb') as file:
-        tpx3_raw = np.fromfile(file,dtype=endianness+"Q")
-        try:
-            endCheck = ((int(tpx3_raw[0]) & \
-                0xFFFFFF)).to_bytes(3,"little").decode('utf-8')
-            if endCheck != "TPX":
-                endianness = '<'
-                tpx3_raw = np.fromfile(file,dtype=endianness+"Q")
-                PixDataType.setEndianness(endianness)
-                TdcDataType.setEndianness(endianness)
-        except:
-            try:
-                endianness = '<'
-                tpx3_raw = np.fromfile(file,dtype=endianness+"Q")
-                PixDataType.setEndianness(endianness)
-                TdcDataType.setEndianness(endianness)
-            except:
-                print(f"The file {inpFile} is not of the proper format")
-
-
-    chunkType = (tpx3_raw>>60) & 0xF
-    tdcChunks = tpx3_raw[chunkType == 0x6]
-    pixChunks = tpx3_raw[chunkType == 0xB]
-    #print(f"p: {((np.nonzero(chunkType == 0xB)[0][0]+1)*8)-1:x}: {pixChunks[0]:b}")
-
-    # TDC chunks parsing
-    triggerCounter = (tdcChunks>>44) & 0xFFF # bits 44-55
-    timeStamp = ((tdcChunks>>9) & 0x7FFFFFFFF) # bits 9-43
-    stamp = ((tdcChunks>>5) & 0xF) # bits 5-8
-
-    # _tdc accounts for the endianness, but is really slow to use
-    _tdc = np.zeros(tdcChunks.size,dtype=TdcDataType.dt)
-    _tdc["TriggerCounter"] = triggerCounter # (unitless)
-    _tdc["Timestamp"] = (stamp * 260e-3) + (timeStamp * 3125e-3) # (ns)
-
-    # so I restructure them into an non-name-indexed array
-    tdc = np.zeros((2,_tdc.size))
-    tdc[0,:] = _tdc["TriggerCounter"]
-    tdc[1,:] = _tdc["Timestamp"]
-
-    # pix chunks parsing
-    dcol = (pixChunks>>53) & 0x7F # bits 53-59
-    spix = (pixChunks>>47) & 0x3F # bits 47-52
-    pixRaw = (pixChunks>>44) & 0x7 # bits 44-46
-    toA = (pixChunks>>30) & 0x3FFF # bits 30-43
-    toT = (pixChunks>>20) & 0x3FF # bits 20-29
-    fToA = (pixChunks>>16) & 0xF # bits 16-19
-    spidrTime = pixChunks & 0xFFFF # btis 0-15
-
-    #print("python:")
-    #print(f"\ttoa: {toA[0]}")
-    #print(f"\ttot: {toT[0]}")
-    #print(f"\tftoa: {((toA<<4) | (~fToA & 0xF))[0]:b}")
-    #print(f"\tspidr: {spidrTime[0]}")
-
-    cToA = ((toA<<4) | (~fToA & 0xF)) * (25/16)
-
-    # _pix accounts for the endianness, but is really slow to use
-    _pix = np.zeros(pixChunks.size,dtype=PixDataType.dt)
-    _pix["X"] = (dcol<<1) + (pixRaw // 4) # (pixels)
-    _pix["Y"] = (spix<<2) + (pixRaw & 0x3) # (pixels)
-    _pix["ToA"] = (spidrTime * 25 * 16384) + cToA # (ns)
-    _pix["ToT"] = toT * 25 # (ns)
-
-    # so I restructure them into an non-name-indexed array
-    pix = np.zeros((4,_pix.size))
-    pix[0,:] = _pix["X"]
-    pix[1,:] = _pix["Y"]
-    pix[2,:] = _pix["ToA"]
-    pix[3,:] = _pix["ToT"]
-
-    return (tdc,pix)
+    return _parse(inpFile)
 
 def simplesort(arr,row):
     # know that arr is almost sorted in all cases, so timsort should be faster
@@ -432,7 +493,7 @@ def correct_ToT(pix:np.ndarray,calibrationFile:str) -> np.ndarray:
 
     Notes
     -----
-        For the ToA correction, this fits an exponential function to the dToA vs
+        For the ToT correction, this fits an exponential function to the dToA vs
     ToT curve, then uses this fit to shift the data ToA based on the ToT.
     '''
 
@@ -448,6 +509,34 @@ def correct_ToT(pix:np.ndarray,calibrationFile:str) -> np.ndarray:
     out[2,:] = pix[2,:] - f(pix[3,:],popt[0],popt[1])
 
     return simplesort(out,2) # sorts array by ToA after the correction
+
+def correct_ToA(pix:np.ndarray,calibration_file:str):
+    '''
+    Performs the time of arrival (ToA) correction using a calibration file.
+    
+    Parameters
+    ----------
+    pix: np.ndarray
+        An array of pix values. See `parse_raw_file`.
+    calibrationFile: str
+        A string pointing to the location of the ToA colibration file in the
+        file system. This file is generated by the `generate_ToA_correction`
+        function.
+    
+    Returns
+    -------
+    pix: np.ndarray
+        An array of pix values. The ToA and ToT are corrected in this array. See
+        `parse_raw_file`. 
+
+    Notes
+    -----
+        The correction to the ToA is done using a calibration file which has 
+    offset times (in ns), which are defined for each pixel relative to the ToA
+    of the (0,0) pixel. This file is generated by sending a short pulse of light
+    to the TPX3CAM such that the whole sensor front is triggered at about the
+    same time.
+    '''
 
 def find_coincidences(pix:np.ndarray,beams:list[list[Beam]],\
     coincidenceTimeWindow:float) -> np.ndarray:
@@ -582,8 +671,7 @@ def process_Coincidences(inpFile:str,calibrationFile:str,beamSs:list[Beam],\
     write `coincidences[1,0,3]`.
     '''
 
-    #(tdc,pix) = parse_raw_file(inpFile)
-    (tdc,pix) = parse(inpFile)
+    (tdc,pix) = parse_raw_file(inpFile)
 
     pix = beam_mask(pix,[*beamSs,*beamIs])
 
@@ -604,16 +692,16 @@ def process_Coincidences(inpFile:str,calibrationFile:str,beamSs:list[Beam],\
     
 if __name__ == '__main__':
     import os
-    import functiontrace
+    #import functiontrace
     #inpFile = os.path.dirname(os.path.realpath(__file__)) + \
     #          r'/examples/demo_file.tpx3' #example file
     #(tdc,pix) = parse_raw_file(inpFile)
     #print(f"TDC data: {tdc}")
     #print(f"Pix data: {pix}")
-    inpFile = '/home/brayden/Documents/Education/Graduate/Lab/Quantum Imaging/Data/04-25-2023/momentum_000013_Optimal.tpx3'
-    calibFile = '/home/brayden/Programs/my_git_dirs/tpx3_toolkit/TOT correction curve new firmware GST.txt'
+    inpFile = './examples/demo_file.tpx3'
+    calibFile = './examples/TOT correction curve new firmware GST.txt'
     #(tdc,pix) = parse_raw_file(inpFile)
-    functiontrace.trace()
+    #functiontrace.trace()
     process_Coincidences(inpFile, calibFile, [Beam(65, 57, 130, 188)], \
         [Beam(130, 57, 195, 188)], 250, 20, 1000, 30, 20)
     #cProfile.run('process_Coincidences(inpFile)') # finish this line
