@@ -1,5 +1,5 @@
 import numpy as np
-from rust_parse import _parse
+from .rust_parse import _parse
 from scipy.optimize import curve_fit
 import time
 
