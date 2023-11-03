@@ -1,3 +1,4 @@
+import torch
 import numpy as np
 from .rust_parse import _parse
 from scipy.optimize import curve_fit
@@ -40,236 +41,9 @@ class Beam:
     
     def toString(self):
         return f'[{self.left}, {self.bottom}, {self.right}, {self.top}]'
-    
 
-#class DataTypeManager:
-#    '''
-#    DEPRECIATED - unneeded after rust backend added
-#    Abstract class for the DataType classes to inherent from.
-#    '''
-#    dtBig: np.dtype
-#    dtLittle: np.dtype
-#    dt: np.dtype
-#    zero = (0,0,0,0)
-#
-#    @classmethod
-#    def setEndianness(cls,endianness:str):
-#        if endianness == '<' or endianness == 'little' or endianness == 'Little':
-#            cls.dt = cls.dtLittle
-#        elif endianness == '>' or endianness == 'big' or endianness == 'Big':
-#            cls.dt = cls.dtBig
-#        else:
-#            raise KeyError(f"Endianness '{endianness}' not known. Valid options\
-#            are '<','little','Little','>','big', or 'Big'.")
-#
-#
-#class PixDataType(DataTypeManager):
-#    '''
-#    DEPRECIATED - unneeded after rust backend added
-#    Keeps track of the pix data type.
-#
-#    Attributes
-#    ----------
-#    dt: np.dtype
-#        The currently set data type for pix chunk data.
-#    dtBig: np.dtype
-#        The big endian version of the pix data type.
-#    dtLittle: np.dtype
-#        The little endian version of the pix data type.
-#    zero: tuple
-#        The zero value for the pix data type. `(0,0,0,0)`.
-#
-#    Methods
-#    -------
-#    setEndianness(endianness:str)
-#        Changes dt to dtBig or dtLittle depending on the value of endianness.
-#
-#        Parameters
-#        ----------
-#        endianness: str
-#            The type of endianness to set the dtypes to. Valid values are:
-#                '<', 'little', 'Little', '>', 'big', 'Big'
-#    
-#    Notes
-#    -----
-#    See the docstring for `parse_raw_file` for more information about the
-#    specific meanings of each dtype field.
-#    '''
-#    dtBig = np.dtype([("X",">B"),("Y",">B"),("ToA",">d"),("ToT",">d")])
-#    dtLittle = np.dtype([("X","<B"),("Y","<B"),("ToA","<d"),("ToT","<d")])
-#    dt = dtLittle
-#
-#class TdcDataType(DataTypeManager):
-#    '''
-#    DEPRECIATED - unneeded after rust backend added
-#    Keeps track of the TDC data type.
-#
-#    Attributes
-#    ----------
-#    dt: np.dtype
-#        The currently set data type for TDC chunk data.
-#    dtBig: np.dtype
-#        The big endian version of the TDC data type.
-#    dtLittle: np.dtype
-#        The little endian version of the TDC data type.
-#    zero: tuple
-#        The zero value for the pix data type. `(0,0,0,0)`.
-#
-#
-#    Methods
-#    -------
-#    setEndianness(endianness:str)
-#        Changes `dt` to `dtBig` or `dtLittle` depending on the value of
-#        `endianness`.
-#
-#        Parameters
-#        ----------
-#        endianness: str
-#            The type of endianness to set the dtypes to. Valid values are:
-#                '<', 'little', 'Little', '>', 'big', 'Big'
-#
-#    Notes
-#    -----
-#    See the docstring for `parse_raw_file` for more information about the
-#    specific meanings of each dtype field.
-#    '''
-#    dtBig = np.dtype([("TriggerCounter",'>H'),("Timestamp",">d")])
-#    dtLittle = np.dtype([("TriggerCounter",'<H'),("Timestamp","<d")])
-#    dt = dtLittle
 
 # functions
-#def parse_raw_file(inpFile: str) -> tuple[np.ndarray,np.ndarray]:
-#    ''' 
-#    DEPRECIATED, uses Rust backend now
-#    Parses the information contained within a '.tpx3' raw data file.
-#    
-#    Parameters
-#    ----------
-#    inpFile: string
-#        a string which describes the path to the '.tpx3' raw data file which is
-#        to be parsed.
-#
-#    Returns
-#    -------
-#    tdc: ndarray
-#        an array of the TDC data packets. Each entry is indexable by the
-#        following values:
-#            [0,:]: TriggerCounter (unitless)
-#                The number of times the trigger has been activated at the time
-#                of the TDC data acquisition.
-#            [1,:]: Timestamp (ns)
-#                The course time elapsed since the beginning of the data
-#                collection. Has a percision of 260 ps, and a maximum value of
-#                107.3741824 s.
-#    pix: ndarray
-#        an array of the Pixel data packets. Each entry is indexable by the
-#        following values:
-#            [0,:]: X (pixels)
-#                data column of the pixel address information.
-#            [1,:]: Y (pixels)
-#                data row of the pixel address information.
-#            [2,:]: ToA (ns)
-#                Time of arrival of particle. Percision of 1.5625 ns, maximum value
-#                of 26.853136 s.
-#            [3,:]: ToT (ns)
-#                Time of threshold. The amount of time it takes for the pixel to
-#                drop back below threshold value. Percision of 25 ns, maximum
-#                value of 25.575 us. 
-#
-#    Notes
-#    -----
-#        Since the endianess of the data is dependant on the architecture of the 
-#    machine which the '.tpx3' file is created on, and also the default endianess
-#    of a C data type is dependant on the machine this code is being run on, this
-#    function compensates for this issue internally and returns standardized data
-#    orientation in the output.
-#        As such, all binary operations which must be performed on the data are
-#    done within this function. Further, any unit setting operations are also
-#    done within this file to get the proper units reported above for the output
-#    data types. That means that there will be a slight discrepency between the
-#    packet descriptions given in the Amsterdam Scientific Instruments SERVAL
-#    manual in Chapter 6: Appendix: file formats, and the dtypes output here.
-#    Most of this discrepency is in the `pixaddr` data field as it requires some
-#    binary processing to extract the x-y coordinates of the Pix data chunk. This
-#    is also evident in the processing of all the fine and course times
-#    components.
-#    '''
-#    endianness = '<' # try little endianness first
-#    PixDataType.setEndianness(endianness)
-#    TdcDataType.setEndianness(endianness)
-#
-#    with open(inpFile, 'rb') as file:
-#        tpx3_raw = np.fromfile(file,dtype=endianness+"Q")
-#        try:
-#            endCheck = ((int(tpx3_raw[0]) & \
-#                0xFFFFFF)).to_bytes(3,"little").decode('utf-8')
-#            if endCheck != "TPX":
-#                endianness = '<'
-#                tpx3_raw = np.fromfile(file,dtype=endianness+"Q")
-#                PixDataType.setEndianness(endianness)
-#                TdcDataType.setEndianness(endianness)
-#        except:
-#            try:
-#                endianness = '<'
-#                tpx3_raw = np.fromfile(file,dtype=endianness+"Q")
-#                PixDataType.setEndianness(endianness)
-#                TdcDataType.setEndianness(endianness)
-#            except:
-#                print(f"The file {inpFile} is not of the proper format")
-#
-#
-#    chunkType = (tpx3_raw>>60) & 0xF
-#    tdcChunks = tpx3_raw[chunkType == 0x6]
-#    pixChunks = tpx3_raw[chunkType == 0xB]
-#    #print(f"p: {((np.nonzero(chunkType == 0xB)[0][0]+1)*8)-1:x}: {pixChunks[0]:b}")
-#
-#    # TDC chunks parsing
-#    triggerCounter = (tdcChunks>>44) & 0xFFF # bits 44-55
-#    timeStamp = ((tdcChunks>>9) & 0x7FFFFFFFF) # bits 9-43
-#    stamp = ((tdcChunks>>5) & 0xF) # bits 5-8
-#
-#    # _tdc accounts for the endianness, but is really slow to use
-#    _tdc = np.zeros(tdcChunks.size,dtype=TdcDataType.dt)
-#    _tdc["TriggerCounter"] = triggerCounter # (unitless)
-#    _tdc["Timestamp"] = (stamp * 260e-3) + (timeStamp * 3125e-3) # (ns)
-#
-#    # so I restructure them into an non-name-indexed array
-#    tdc = np.zeros((2,_tdc.size))
-#    tdc[0,:] = _tdc["TriggerCounter"]
-#    tdc[1,:] = _tdc["Timestamp"]
-#
-#    # pix chunks parsing
-#    dcol = (pixChunks>>53) & 0x7F # bits 53-59
-#    spix = (pixChunks>>47) & 0x3F # bits 47-52
-#    pixRaw = (pixChunks>>44) & 0x7 # bits 44-46
-#    toA = (pixChunks>>30) & 0x3FFF # bits 30-43
-#    toT = (pixChunks>>20) & 0x3FF # bits 20-29
-#    fToA = (pixChunks>>16) & 0xF # bits 16-19
-#    spidrTime = pixChunks & 0xFFFF # btis 0-15
-#
-#    #print("python:")
-#    #print(f"\ttoa: {toA[0]}")
-#    #print(f"\ttot: {toT[0]}")
-#    #print(f"\tftoa: {((toA<<4) | (~fToA & 0xF))[0]:b}")
-#    #print(f"\tspidr: {spidrTime[0]}")
-#
-#    cToA = ((toA<<4) | (~fToA & 0xF)) * (25/16)
-#
-#    # _pix accounts for the endianness, but is really slow to use
-#    _pix = np.zeros(pixChunks.size,dtype=PixDataType.dt)
-#    _pix["X"] = (dcol<<1) + (pixRaw // 4) # (pixels)
-#    _pix["Y"] = (spix<<2) + (pixRaw & 0x3) # (pixels)
-#    _pix["ToA"] = (spidrTime * 25 * 16384) + cToA # (ns)
-#    _pix["ToT"] = toT * 25 # (ns)
-#
-#    # so I restructure them into an non-name-indexed array
-#    pix = np.zeros((4,_pix.size))
-#    pix[0,:] = _pix["X"]
-#    pix[1,:] = _pix["Y"]
-#    pix[2,:] = _pix["ToA"]
-#    pix[3,:] = _pix["ToT"]
-#
-#    return (tdc,pix)
 
 def parse_raw_file(inpFile: str) -> tuple[np.ndarray,np.ndarray]:
     ''' 
@@ -331,7 +105,10 @@ def parse_raw_file(inpFile: str) -> tuple[np.ndarray,np.ndarray]:
 def simplesort(arr,row):
     # know that arr is almost sorted in all cases, so timsort should be faster
     # than quicksort
-    return arr[:,arr[row,:].argsort(kind='stable')] 
+    if type(arr) == "torch.Tensor":
+        return arr[:,arr[row,:].argsort(stable=True)]
+    else:
+        return arr[:,arr[row,:].argsort(kind="stable")] 
 
 def beam_mask(pix:np.ndarray,beamLocations:list[Beam],\
     preserveSize:bool=False) -> np.ndarray:
@@ -404,9 +181,13 @@ def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=
         now correspond to single photon events rather than the avalanched photon
         events as in the input array.
     '''
-    ###############################################################
-    # Currently the same as Guillaume's code until I make my own. #
-    ###############################################################
+    # paralellization with PyTorch
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+    else:
+        device = torch.device("cpu")
+    pix = torch.from_numpy(pix).to(device)
+    
     pix = simplesort(pix,2)
 #    times = []
 #    t00 = time.time()
@@ -415,34 +196,34 @@ def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=
         for offset in range(1,clusterRange):
 #            t0 = time.time()
 
-            mask = np.full(pix.shape[1], True)
-            largerToT_mask = np.logical_not(mask)
-            old_centroids = np.logical_not(mask)
-            new_centroids = np.logical_not(mask)
+            mask = torch.full((pix.size()[1],), True).to(device)
+            largerToT_mask = torch.logical_not(mask)
+            old_centroids = torch.logical_not(mask)
+            new_centroids = torch.logical_not(mask)
 
             # Set mask to False wherever element is part of cluster, i.e. mask[i] 
             # being False indicates that it is in a cluster with mask[i-j]
             # (for i >=j). False elements in mask will be discarded
-            mask[offset::offset] = np.invert(\
-                                    np.logical_and(\
-                                     np.diff(pix[2,::offset].astype(np.float64)) < timeWindow,\
-                                     np.sqrt(np.abs(np.diff(pix[0,::offset].astype(np.float64)))**2 \
-                                      + np.abs(np.diff(pix[1,::offset].astype(np.float64)))**2)  < spaceWindow\
+            mask[offset::offset] = torch.logical_not(\
+                                    torch.logical_and(\
+                                     torch.diff(pix[2,::offset].double()) < timeWindow,\
+                                     torch.sqrt(torch.abs(torch.diff(pix[0,::offset].double()))**2 \
+                                      + torch.abs(torch.diff(pix[1,::offset].double()))**2)  < spaceWindow\
                                     )\
                                    )
 
             # largerToT_mask[i] is True when ToT[i+j]-ToT[i] > 0. This array
             # is used to identify clusters where the centroid needs to be swapped.
-            largerToT_mask[0:-offset:offset] = np.diff(pix[3,::offset]) > 0 
+            largerToT_mask[0:-offset:offset] = torch.diff(pix[3,::offset]) > 0 
 
             # Identify indices of old centroids which have a element within
             # its cluster with a larger ToT. old_centroids[i] is True where 
             # mask[i] is True and largerToT_mask[i] is True and mask[i+j] is False
-            old_centroids[0:-offset:offset] = np.logical_and(\
-                                               np.logical_and(\
+            old_centroids[0:-offset:offset] = torch.logical_and(\
+                                               torch.logical_and(\
                                                 largerToT_mask[0:-offset:offset],\
                                                 mask[0:-offset:offset]),\
-                                               np.invert(mask[offset::offset])\
+                                               torch.logical_not(mask[offset::offset])\
                                               )
             new_centroids[offset::offset] = old_centroids[0:-offset:offset]
 
@@ -453,24 +234,11 @@ def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=
             # Throw away elments within identified clusters which are not centroids
             pix = pix[:,mask]
 
-        if pixprev == pix.shape[1]: # convergence check
+        if pixprev == pix.size()[1]: # convergence check
             break
-        pixprev = pix.shape[1]
+        pixprev = pix.size()[1]
         
-#            t1 = time.time()
-#            times.append(t1-t0)
-    
-#    t11 = time.time()
-
-#    print(f"Total time is {t11-t00} s.")
-#    print(f"Total time inside loop is {sum(times)} s.")
-#    print(f"Thus, the loop-based python overhead is {(t11-t00)-sum(times)} s.")
-#    t11 = time.time()
-
-#    print(f"Total time is {t11-t00} s.")
-#    print(f"Total time inside loop is {sum(times)} s.")
-#    print(f"Thus, the loop-based python overhead is {(t11-t00)-sum(times)} s.")
-    return pix
+    return pix.numpy()
 
 def correct_ToT(pix:np.ndarray,calibrationFile:str) -> np.ndarray:
     '''
@@ -481,15 +249,14 @@ def correct_ToT(pix:np.ndarray,calibrationFile:str) -> np.ndarray:
     pix: np.ndarray
         An array of pix values. See `parse_raw_file`.
     calibrationFile: str
-        A string pointing to the location of the ToA colibration file in the
-        file system. This file is generated by the `generate_ToA_correction`
-        function.
+        A string pointing to the location of the ToT colibration file in the
+        file system.
     
     Returns
     -------
     pix: np.ndarray
-        An array of pix values. The ToA and ToT are corrected in this array. See
-        `parse_raw_file`. 
+        An array of pix values. The ToA is corrected in this array based on the 
+        ToT. See `parse_raw_file`. 
 
     Notes
     -----
@@ -520,13 +287,12 @@ def correct_ToA(pix:np.ndarray,calibration_file:str):
         An array of pix values. See `parse_raw_file`.
     calibrationFile: str
         A string pointing to the location of the ToA colibration file in the
-        file system. This file is generated by the `generate_ToA_correction`
-        function.
+        file system.
     
     Returns
     -------
     pix: np.ndarray
-        An array of pix values. The ToA and ToT are corrected in this array. See
+        An array of pix values. The ToA is corrected in this array. See
         `parse_raw_file`. 
 
     Notes
@@ -537,6 +303,8 @@ def correct_ToA(pix:np.ndarray,calibration_file:str):
     to the TPX3CAM such that the whole sensor front is triggered at about the
     same time.
     '''
+    # generate an array of offsets from the calibration file based on 
+    # pix[0:1,:], then 
 
 def find_coincidences(pix:np.ndarray,beams:list[list[Beam]],\
     coincidenceTimeWindow:float) -> np.ndarray:
