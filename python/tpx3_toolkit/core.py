@@ -105,7 +105,7 @@ def parse_raw_file(inpFile: str) -> tuple[np.ndarray,np.ndarray]:
 def simplesort(arr,row):
     # know that arr is almost sorted in all cases, so timsort should be faster
     # than quicksort
-    if type(arr) == "torch.Tensor":
+    if torch.is_tensor(arr):
         return arr[:,arr[row,:].argsort(stable=True)]
     else:
         return arr[:,arr[row,:].argsort(kind="stable")] 
@@ -238,7 +238,7 @@ def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=
             break
         pixprev = pix.size()[1]
         
-    return pix.numpy()
+    return pix.cpu().numpy()
 
 def correct_ToT(pix:np.ndarray,calibrationFile:str) -> np.ndarray:
     '''
