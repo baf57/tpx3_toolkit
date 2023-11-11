@@ -79,8 +79,8 @@ def bin(coincidences:np.ndarray, xbins:int, ybins:int) -> np.ndarray:
 
 def space_filter_alt(coincidences:np.ndarray,threshold:float):
     '''
-    Establishes a spatial filter which filters the spatial correlations around 
-    the center of their maximum by some radius.
+    Establishes a spatial filter which filters the spatial correlations by a
+    percentage of the maximum spatial mode (x and y at the same time).
     '''
     data = coincidences[0,:,:] + coincidences[1,:,:]
 

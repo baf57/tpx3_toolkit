@@ -9,6 +9,7 @@ from matplotlib.figure import Figure
 from matplotlib.axes import Axes
 from matplotlib.collections import LineCollection
 from matplotlib import colors as c
+from scipy import signal
 import matplotlib.cm as cm
 import numpy as np
 
@@ -173,6 +174,57 @@ def plot_coincidence_xy(correlations:np.ndarray, sign:int=1, \
     ax.set_ylabel(r'$y_{idl} + y_{sig}$')
 
     return (fig,view)
+
+def cross_correlation(ref:np.ndarray, target:np.ndarray, flipped=True, plot=True):
+    if flipped:
+        target = np.rot90(target, 2)
+
+    #normalize
+    ref = ref / np.sum(ref)
+    target = target / np.sum(target)
+
+    #pad for calculation
+    target_padded = np.pad(target, ((round(ref.shape[0]/2),round(ref.shape[0]/2)),
+                             (round(ref.shape[1]/2),round(ref.shape[1]/2))))
+    ref_padded = np.pad(ref, ((0,target_padded.shape[0]-ref.shape[0]),
+                       (0,target_padded.shape[1]-ref.shape[1])))
+
+    #scan over all positions and sum square root of product
+    cxc = np.zeros_like(target)
+    for i in range(target.shape[0]):
+        for j in range(target.shape[1]):
+            cxc[i,j] = np.sum(np.sqrt(np.roll(ref_padded,(i,j),axis=(0,1)) * target_padded))
+           
+    #xdiff = target.shape[0] - ref.shape[0]
+    #if xdiff > 0:
+    #    ref = np.pad(ref, ((xdiff//2,round(xdiff/2)), (0,0)))
+    #else:
+    #    target = np.pad(target, ((-xdiff//2,round(-xdiff/2)),(0,0)))
+    #ydiff = target.shape[1] - ref.shape[1]
+    #if ydiff > 0:
+    #    ref = np.pad(ref, ((0,0),(ydiff//2,round(ydiff/2))))
+    #else:
+    #    target = np.pad(target, ((0,0),(-ydiff//2,round(-ydiff/2))))
+    #    
+    #ref = (ref - np.mean(ref)) / np.std(ref)
+    #target = (target - np.mean(target)) / np.std(target)
+
+    #cxc = signal.correlate(ref,target,mode='same')
+    #cxc = cxc / cxc.size
+    
+    if plot:
+        fig = plt.figure()
+        ax1 = fig.add_subplot(131)
+        ax2 = fig.add_subplot(132)
+        ax3 = fig.add_subplot(133)
+
+        ax1.imshow(ref,origin='lower',aspect="equal",interpolation="none")
+        ax2.imshow(target,origin='lower',aspect="equal",interpolation="none")
+        ax3.imshow(cxc,origin='lower',aspect="equal",interpolation="none",vmin=0,vmax=1)
+
+        plt.show()
+
+    return cxc
 
 def _make_coincidences_axis(pix:np.ndarray,ax:Axes,\
                            colorMap:str='viridis') -> np.ndarray:
