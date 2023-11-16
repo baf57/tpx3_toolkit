@@ -113,8 +113,7 @@ def plot_correlations(coincidences:np.ndarray,colorMap:str="gray", \
     return fig
 
 
-def plot_histogram(coincidences:np.ndarray, min_bin=-200, max_bin=200,\
-                   num=100, color='r', fig:Figure=None) -> Figure:
+def plot_histogram(coincidences:np.ndarray, min_bin=-200, max_bin=200, color='r', fig:Figure=None) -> Figure:
     if fig is None:
         fig = plt.figure(figsize=(4,8))
         ax = fig.add_axes([0,0,1,1])
@@ -123,6 +122,21 @@ def plot_histogram(coincidences:np.ndarray, min_bin=-200, max_bin=200,\
 
     ax.set_xlabel("dt [ns]")
     ax.set_ylabel("Count")
+    
+    if min_bin > 0: min_bin += 1
+    if min_bin <= 0: min_bin -= 1
+    if max_bin >= 0: max_bin += 1
+    if max_bin < 0: max_bin -= 1
+    
+    bin_base = (abs(min_bin) + abs(max_bin)) / 12.5
+    
+    num = bin_base
+    i = 1
+    while(num < 100):
+        num = round(bin_base * (2**i))
+        i += 1
+        
+    #print(f"{num=} = ({bin_base=}) * ({i-1=})")
 
     bins = np.linspace(min_bin,max_bin,num)
     # get difference between signal and idler arrival times
