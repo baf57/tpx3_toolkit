@@ -22,5 +22,5 @@ classifiers = [
 ]
 
 [tool.maturin]
-module-name = "tpx3_toolkit.rust_parse" #must match module name given in lib.rs
+module-name = "tpx3_toolkit.rust_tpx3" #must match module name given in lib.rs
 python-source = "python" #defines python source file location

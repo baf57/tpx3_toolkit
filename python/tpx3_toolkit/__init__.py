@@ -1,1 +1,1 @@
-from .core import *
+from tpx3_toolkit.core import *

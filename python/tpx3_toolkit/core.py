@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from .rust_parse import _parse
+from tpx3_toolkit.rust_tpx3 import *
 from scipy.optimize import curve_fit
 import time
 
@@ -43,15 +43,14 @@ class Beam:
         return f'[{self.left}, {self.bottom}, {self.right}, {self.top}]'
 
 
-# functions
-
-def parse_raw_file(inpFile: str) -> tuple[np.ndarray,np.ndarray]:
+# wrappers for Rust functions
+def parse_raw_file(inp_file: str) -> tuple[np.ndarray,np.ndarray]:
     ''' 
     Parses the information contained within a '.tpx3' raw data file.
     
     Parameters
     ----------
-    inpFile: string
+    inp_file: string
         a string which describes the path to the '.tpx3' raw data file which is
         to be parsed.
 
@@ -100,8 +99,33 @@ def parse_raw_file(inpFile: str) -> tuple[np.ndarray,np.ndarray]:
     is also evident in the processing of all the fine and course times
     components.
     '''
-    return _parse(inpFile)
+    return _parse(inp_file)
 
+def chop_large_file(inp_file, max_size=100):
+    '''
+    Chops a '.tpx3' file into smaller, properly formatted, '.tpx3' files.
+    
+    Parameters
+    ----------
+    inp_file: string
+        The path to the file of interest
+    max_size: float, optional, default=100
+        The maximum size of the chopped files, in MB
+        
+    Notes
+    -----
+    If you are chopping the file '/path/to/file/big_file.tpx3', then this 
+    function will create a folder '/path/to/file/big_file/' and place all of the
+    chopped file parts in there with the names
+    '/path/to/file/big_file/part_0.tpx3', '/path/to/file/big_file/part_1.tpx3',
+    etc.. 
+    If this folder already exists, it and all its contents will be deleted, and
+    then a new folder with the new chopping will be created.
+    '''
+    _chop(inp_file, max_size)
+
+
+# functions
 def simplesort(arr,row):
     # know that arr is almost sorted in all cases, so timsort should be faster
     # than quicksort
@@ -182,10 +206,11 @@ def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=
         events as in the input array.
     '''
     # paralellization with PyTorch
-    if torch.cuda.is_available():
-        device = torch.device("cuda:0")
-    else:
-        device = torch.device("cpu")
+    #if torch.cuda.is_available():
+    #    device = torch.device("cuda:0")
+    #else:
+    #    device = torch.device("cpu")
+    device = torch.device("cpu")
     pix = torch.from_numpy(pix).to(device)
     
     pix = simplesort(pix,2)
@@ -466,10 +491,14 @@ if __name__ == '__main__':
     #(tdc,pix) = parse_raw_file(inpFile)
     #print(f"TDC data: {tdc}")
     #print(f"Pix data: {pix}")
-    inpFile = './examples/demo_file.tpx3'
-    calibFile = './examples/TOT correction curve new firmware GST.txt'
+    inpFile = os.path.dirname(os.path.realpath(__file__)) + \
+        r'/examples/demo_file.tpx3'
+    calibFile = os.path.dirname(os.path.realpath(__file__)) + \
+        r'/examples/TOT correction curve new firmware GST.txt'
     #(tdc,pix) = parse_raw_file(inpFile)
     #functiontrace.trace()
-    process_Coincidences(inpFile, calibFile, [Beam(65, 57, 130, 188)], \
-        [Beam(130, 57, 195, 188)], 250, 20, 1000, 30, 20)
+    test = process_Coincidences(inpFile, calibFile, [Beam(65, 57, 130, 188)], 
+                                [Beam(130, 57, 195, 188)], 250, 20, 1000, 30, 
+                                20)
+    print(test)
     #cProfile.run('process_Coincidences(inpFile)') # finish this line
