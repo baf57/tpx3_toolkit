@@ -28,5 +28,5 @@ fn rust_tpx3(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
 
 /* How to compile
 CLI:
-% maturin develop
+% maturin develop --release
 */

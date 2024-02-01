@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{self, Read, Write, ErrorKind};
+use std::io::{self, BufRead, BufReader, ErrorKind, Read, Write};
 
 struct Storage{
     storage: Vec<u8>,
@@ -30,6 +30,8 @@ impl Storage {
     }
 }
 
+const BUFFERSIZE: usize = 1024*32; // 32 KiB buffer
+
 pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
     // Just read the file byte-by-byte into a vec. Once the sequence {b'T',
     // b'P', b'X'} is seen, try to put the buffer into storage.  If len(buffer)
@@ -38,9 +40,10 @@ pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
     // this until the end of the file is reached, attempt to add the final
     // buffer to the storage, then write the storage and finish.
     let mut buffer: Vec<u8> = Vec::new();
-    let mut curr_byte: [u8;1] = [0];
+    let mut curr_byte: u8;
 
-    let mut f = File::open(inp_file)?;
+    let f = File::open(inp_file)?;
+    let mut reader = BufReader::with_capacity(BUFFERSIZE, &f);
 
     // max_size is in MB
     let max_size_bytes: u64 = (max_size * f64::powf(10.0,6.0)) as u64;    
@@ -58,48 +61,59 @@ pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
         }
     };
 
+    // actual writing of data to files
     let mut counter: u8 = 0;
     if f.metadata()?.len() > max_size_bytes {
         loop{
-            // fill single byte buffer, if EOF then break. If not continue
-            match f.read_exact(&mut curr_byte){
-                Ok(()) => (),
-                Err(error) => match error.kind(){
-                    ErrorKind::UnexpectedEof => {break},
-                    other_error => {
-                        panic!("Unknown read error: {:?}", other_error)
-                    }
-                },
-            };
+            let real_buffer = reader.fill_buf()?;
+            let buffer_length = real_buffer.len();
 
-            buffer.push(curr_byte[0]);
-
-            if buffer.len() > 4 && //skips first TPX
-              buffer[(buffer.len()-3)..] == vec![b'T',b'P',b'X'] {
-                match storage.store(buffer[..(buffer.len()-3)].to_vec()){
-                    Ok(()) => (),
-                    Err(error) => match error.kind(){
-                        ErrorKind::InvalidData => {
-                            storage.write(&format!("{}{:03}.tpx3",
-                                                   name_start, counter))?;
-                            counter+= 1;
-                            storage.store(buffer[..(buffer.len()-3)].to_vec())?;
-                        },
-                        other_error => panic!("Unknown storage error: {:?}", 
-                                              other_error)
-                    }
-                }
-
-                buffer = Vec::new();
-                buffer.push(b'T');
-                buffer.push(b'P');
-                buffer.push(b'X');
+            // EOF
+            if buffer_length == 0{
+                break;
             }
+
+            for byte in real_buffer.bytes(){
+                // error handling
+                match byte{
+                    Ok(byte) => {curr_byte = byte}
+                    Err(err) => panic!("Read error: {:?}", err)
+                }
+                buffer.push(curr_byte);
+
+                // skip first TPX, but check for second one to write to storage
+                if buffer.len() > 4 &&
+                buffer[(buffer.len()-3)..] == vec![b'T',b'P',b'X'] {
+                    match storage.store(buffer[..(buffer.len()-3)].to_vec()){
+                        Ok(()) => (),
+                        Err(error) => match error.kind(){
+                            ErrorKind::InvalidData => {
+                                storage.write(&format!("{}{:03}.tpx3",
+                                                    name_start, counter))?;
+                                counter+= 1;
+                                storage.store(buffer[..(buffer.len()-3)].to_vec())?;
+                            },
+                            other_error => panic!("Unknown storage error: {:?}", 
+                                                other_error)
+                        }
+                    }
+
+                    // properly start next buffer
+                    buffer = Vec::new();
+                    buffer.push(b'T');
+                    buffer.push(b'P');
+                    buffer.push(b'X');
+                }
+            }
+
+            // Don't read the same data twice
+            reader.consume(buffer_length);
         }
 
         //println!("Buffer size: {:?}", (buffer.len()*8));
         //println!("Counter: {:?}", counter);
 
+        // final check to get everything left in buffer into storage
         match storage.store(buffer.clone()){
             Ok(()) => (),
             Err(error) => match error.kind(){
@@ -117,4 +131,9 @@ pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
     }
 
     Ok(())
+}
+
+#[test]
+fn parse_test() -> io::Result<()>{
+    chop("test/5s_noise_static_000007.tpx3",500.0)
 }
