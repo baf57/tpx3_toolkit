@@ -206,12 +206,18 @@ def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=
         events as in the input array.
     '''
     # paralellization with PyTorch
-    #if torch.cuda.is_available():
-    #    device = torch.device("cuda:0")
-    #else:
-    #    device = torch.device("cpu")
-    device = torch.device("cpu")
-    pix = torch.from_numpy(pix).to(device)
+    # try cuda if you can. If not go for CPU and inform
+    try:
+        if torch.cuda.is_available():
+            device = torch.device("cuda:0")
+        else:
+            print("CUDA unavailable, trying CPU processing.")
+            device = torch.device("cpu")
+        pix = torch.from_numpy(pix).to(device)
+    except:
+        print("Error using CUDA, trying CPU processing.")
+        device = torch.device("cpu")
+        pix = torch.from_numpy(pix).to(device)
     
     pix = simplesort(pix,2)
 #    times = []

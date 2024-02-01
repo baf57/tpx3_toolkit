@@ -97,8 +97,8 @@ pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
             }
         }
 
-        println!("Buffer size: {:?}", (buffer.len()*8));
-        println!("Counter: {:?}", counter);
+        //println!("Buffer size: {:?}", (buffer.len()*8));
+        //println!("Counter: {:?}", counter);
 
         match storage.store(buffer.clone()){
             Ok(()) => (),
@@ -118,8 +118,3 @@ pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
 
     Ok(())
 }
-
-//fn main() -> io::Result<()> {
-//    // implement in Python
-//    chop("/home/brayden/Documents/Education/Graduate/Lab/Quantum Imaging/Turbulence Robustness/Data/Images/1_12/video/video_noise_000000.tpx3",100.0)
-//}
