@@ -4,3 +4,6 @@ target
 .data
 rust_parse.*
 .vscode
+profile*
+Cargo.lock
+5s_noise_static_000007.tpx3

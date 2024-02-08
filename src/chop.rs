@@ -30,7 +30,7 @@ impl Storage {
     }
 }
 
-const BUFFERSIZE: usize = 1024*32; // 32 KiB buffer
+const BUFFERSIZE: usize = 2_097_152; // 2M buffer
 
 pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
     // Just read the file byte-by-byte into a vec. Once the sequence {b'T',
@@ -43,7 +43,9 @@ pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
     let mut curr_byte: u8;
 
     let f = File::open(inp_file)?;
-    let mut reader = BufReader::with_capacity(BUFFERSIZE, &f);
+    let mut reader = BufReader::new(&f);
+    let mut contents = vec![0_u8; BUFFERSIZE];
+    let mut read_length: usize;
 
     // max_size is in MB
     let max_size_bytes: u64 = (max_size * f64::powf(10.0,6.0)) as u64;    
@@ -65,21 +67,20 @@ pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
     let mut counter: u8 = 0;
     if f.metadata()?.len() > max_size_bytes {
         loop{
-            let real_buffer = reader.fill_buf()?;
-            let buffer_length = real_buffer.len();
+            read_length = reader.read(&mut contents)?;
 
             // EOF
-            if buffer_length == 0{
+            if read_length == 0{
                 break;
             }
 
-            for byte in real_buffer.bytes(){
+            for byte in &contents{
                 // error handling
-                match byte{
-                    Ok(byte) => {curr_byte = byte}
-                    Err(err) => panic!("Read error: {:?}", err)
-                }
-                buffer.push(curr_byte);
+                //match byte{
+                //    Ok(byte) => {curr_byte = byte}
+                //    Err(err) => panic!("Byte read error: {:?}", err)
+                //}
+                buffer.push(*byte);
 
                 // skip first TPX, but check for second one to write to storage
                 if buffer.len() > 4 &&
@@ -105,9 +106,6 @@ pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
                     buffer.push(b'X');
                 }
             }
-
-            // Don't read the same data twice
-            reader.consume(buffer_length);
         }
 
         //println!("Buffer size: {:?}", (buffer.len()*8));
@@ -135,5 +133,6 @@ pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
 
 #[test]
 fn parse_test() -> io::Result<()>{
-    chop("test/5s_noise_static_000007.tpx3",500.0)
+    chop("python/tpx3_toolkit/examples/5s_noise_static_000007.tpx3",
+    500.0)
 }
