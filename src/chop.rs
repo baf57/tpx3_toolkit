@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::io::{self, BufRead, BufReader, ErrorKind, Read, Write};
+use std::io::{self, BufReader, ErrorKind, Read, Write};
 
 struct Storage{
     storage: Vec<u8>,
@@ -14,8 +14,9 @@ impl Storage {
         }
     }
 
-    pub fn store(&mut self, mut buffer: Vec<u8>) -> io::Result<()>{
-        if self.storage.len() + buffer.len() <= self.max_size.try_into().unwrap(){
+    pub fn store(&mut self, mut buffer: Vec<u8>, force: bool) -> io::Result<()>{
+        // force is for scenario where I want it to store no matter what
+        if self.storage.len() + buffer.len() <= self.max_size.try_into().unwrap() || force{
             self.storage.append(&mut buffer);
             return Ok(());
         }
@@ -40,12 +41,13 @@ pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
     // this until the end of the file is reached, attempt to add the final
     // buffer to the storage, then write the storage and finish.
     let mut buffer: Vec<u8> = Vec::new();
-    let mut curr_byte: u8;
 
     let f = File::open(inp_file)?;
-    let mut reader = BufReader::new(&f);
+    let filesize: u64 = f.metadata()?.len();
+    let mut reader = BufReader::new(f);
     let mut contents = vec![0_u8; BUFFERSIZE];
-    let mut read_length: usize;
+    let mut read_length: usize = 0;
+    let mut percent: f64;
 
     // max_size is in MB
     let max_size_bytes: u64 = (max_size * f64::powf(10.0,6.0)) as u64;    
@@ -65,14 +67,21 @@ pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
 
     // actual writing of data to files
     let mut counter: u8 = 0;
-    if f.metadata()?.len() > max_size_bytes {
+    let mut buffer_length: usize;
+    if filesize > max_size_bytes {
         loop{
-            read_length = reader.read(&mut contents)?;
+            buffer_length = reader.read(&mut contents)?;
+            read_length += buffer_length;
+
+            percent = ((read_length as f64) / (filesize as f64)) * 100.0;
+            print!("\x1B[2J\x1B[1;1H");
+            println!("Progress: {percent:4.1}%");
 
             // EOF
-            if read_length == 0{
+            if buffer_length == 0{
                 break;
             }
+
 
             for byte in &contents{
                 // error handling
@@ -85,14 +94,14 @@ pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
                 // skip first TPX, but check for second one to write to storage
                 if buffer.len() > 4 &&
                 buffer[(buffer.len()-3)..] == vec![b'T',b'P',b'X'] {
-                    match storage.store(buffer[..(buffer.len()-3)].to_vec()){
+                    match storage.store(buffer[..(buffer.len()-3)].to_vec(), false){
                         Ok(()) => (),
                         Err(error) => match error.kind(){
                             ErrorKind::InvalidData => {
                                 storage.write(&format!("{}{:03}.tpx3",
                                                     name_start, counter))?;
                                 counter+= 1;
-                                storage.store(buffer[..(buffer.len()-3)].to_vec())?;
+                                storage.store(buffer[..(buffer.len()-3)].to_vec(), false)?;
                             },
                             other_error => panic!("Unknown storage error: {:?}", 
                                                 other_error)
@@ -112,14 +121,14 @@ pub fn chop(inp_file: &str, max_size: f64) -> io::Result<()> {
         //println!("Counter: {:?}", counter);
 
         // final check to get everything left in buffer into storage
-        match storage.store(buffer.clone()){
+        match storage.store(buffer.clone(), false){
             Ok(()) => (),
             Err(error) => match error.kind(){
                 ErrorKind::InvalidData => {
                     storage.write(&format!("{}{:03}.tpx3",
                                             name_start, counter))?;
                     counter+= 1;
-                    storage.store(buffer.clone())?;
+                    storage.store(buffer.clone(), true)?;
                 },
                 other_error => panic!("Unknown storage error: {:?}", 
                                         other_error)

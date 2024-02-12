@@ -2,7 +2,7 @@
 __pycache__
 target
 .data
-rust_parse.*
+rust_tpx3.*
 .vscode
 profile*
 Cargo.lock

@@ -15,7 +15,9 @@ pub fn i_parse(inp_file: &str)
     let mut pix: Vec<Vec<f64>> = vec![vec![],vec![],vec![],vec![]];
 
     // open file with buffer. If the file open fails then send that up
-    let mut f: File = File::open(inp_file)?;
+    let mut f: File = File::open(inp_file).unwrap_or_else(|error| {
+        panic!("{:?}\nCannot open file {:?}", error, inp_file)
+    });
     let mut buffer: Vec<u8> = Vec::new();
 
     f.read_to_end(&mut buffer)?; // read file to buffer
