@@ -83,13 +83,13 @@ def plot_coincidences(coincidences:np.ndarray,colorMap:str='',\
     else:
         [ax_idler,ax_signal] = fig.axes
 
-    _make_coincidences_axis(coincidences[0,:,:],ax_idler,colorMap)
-    _make_coincidences_axis(coincidences[1,:,:],ax_signal,colorMap)
+    idl = _make_coincidences_axis(coincidences[0,:,:],ax_idler,colorMap)
+    sig = _make_coincidences_axis(coincidences[1,:,:],ax_signal,colorMap)
 
     ax_signal.set_title("Signal")
     ax_idler.set_title("Idler")
 
-    return fig
+    return (fig, sig, idl)
 
 def plot_correlations(coincidences:np.ndarray,colorMap:str="gray", \
                       fig:Figure=None) -> Figure: #type:ignore
