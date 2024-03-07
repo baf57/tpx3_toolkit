@@ -2,7 +2,9 @@ import torch
 import numpy as np
 from tpx3_toolkit.rust_tpx3 import *
 from scipy.optimize import curve_fit
-import time
+
+# global variables
+DT = 1.5625 # ns, var for the time bin width
 
 # classes
 class Beam:
@@ -39,9 +41,28 @@ class Beam:
     def toList(self):
         return [self.left,self.bottom,self.right,self.top]
     
-    def toString(self):
-        return f'[{self.left}, {self.bottom}, {self.right}, {self.top}]'
-
+    @property
+    def area(self):
+        '''Area (in pixels) contained within the beam.'''
+        x_spread = self.right - self.left
+        y_spread = self.top - self.bottom
+        return x_spread * y_spread
+    
+# Add classes which describes tdc, pix, and coincs. They should all be based
+# around ndarrays, and just have documentation and getter attributes which make 
+# the abstraction clearer and give access to named views. Optimally, I don't 
+# want to lose the ability to call functions on the class which would work with
+# ndarrays in general, but inheriting from ndarrays seems... not so great in 
+# practice. It looks like writing a custom array container may be the move, and
+# this is well describer here:
+# https://numpy.org/doc/stable/user/basics.dispatch.html#basics-dispatch
+# Another benefit is that I really don't need to implement most ndarray
+# functionality since it's rare that operations are performed on whole arrays of
+# these types. I will need to implement __array__(), __array_func__(), and
+# __array_ufunc__() as outlined in the article above, as well as inhereting from
+# NDArrayOperatorsMixin. Most of this is universal and should give most 
+# functionality, except for __array_func__() which will need to cover specific
+# NumPy functions I want to implement, like np.concatenate().
 
 # wrappers for Rust functions
 def parse_raw_file(inp_file: str) -> tuple[np.ndarray,np.ndarray]:
@@ -158,8 +179,6 @@ def beam_mask(pix:np.ndarray,beamLocations:list[Beam],\
         entries are either removed (default, when preserveSize == `False`), or
         set to zero (when preservedSize == `True`).
     '''
-    if not(isinstance(beamLocations,list)):
-        beamLocations = [beamLocations] # type: ignore # yea yea Python, complain
 
     beamMasks = np.full((len(beamLocations),pix.shape[1]),False)
     for beam,i in zip(beamLocations,range(len(beamLocations))):
@@ -176,8 +195,12 @@ def beam_mask(pix:np.ndarray,beamLocations:list[Beam],\
     
     return out
 
-def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=4,\
-     numScans:int=5)->np.ndarray:
+def clustering(pix:np.ndarray,
+               timeWindow:float,
+               spaceWindow:int,
+               clusterRange:int=4,
+               numScans:int=5,
+               CUDA:bool=False)->np.ndarray:
     '''
     Parameters
     ----------
@@ -197,36 +220,38 @@ def clustering(pix:np.ndarray,timeWindow:float,spaceWindow:int,clusterRange:int=
     numScans: int, optional, default=5
         How many times to repeat this algorithm. Essentially works to increase the 
         clusterRange.
+    CUDA: bool, optional, default=False
+        A flag which determines whether you want to attempt GPU processing via
+        CUDA or not. This does not *guarentee* GPU processing, but it attempts 
+        it.
 
     Returns
     -------
     out: np.ndarray
         An array of pix values based on the `pixDataType.dt` dtype. These values
-        now correspond to single photon events rather than the avalanched photon
+        now correspond to single photon events rather than the unclustered photon
         events as in the input array.
     '''
-    # paralellization with PyTorch
-    # try cuda if you can. If not go for CPU and inform
-    try:
-        if torch.cuda.is_available():
-            device = torch.device("cuda:0")
-        else:
-            print("CUDA unavailable, trying CPU processing.")
+    if CUDA:
+        # paralellization with PyTorch
+        # try cuda if you can. If not go for CPU and inform
+        try:
+            if torch.cuda.is_available():
+                device = torch.device("cuda:0")
+            else:
+                print("CUDA unavailable, trying CPU processing.")
+                device = torch.device("cpu")
+        except:
+            print("Error using CUDA, trying CPU processing.")
             device = torch.device("cpu")
-        pix = torch.from_numpy(pix).to(device)
-    except:
-        print("Error using CUDA, trying CPU processing.")
+    else:
         device = torch.device("cpu")
-        pix = torch.from_numpy(pix).to(device)
     
+    pix = torch.from_numpy(pix).to(device)
     pix = simplesort(pix,2)
-#    times = []
-#    t00 = time.time()
     pixprev = 0
     for scan in range(numScans):
         for offset in range(1,clusterRange):
-#            t0 = time.time()
-
             mask = torch.full((pix.size()[1],), True).to(device)
             largerToT_mask = torch.logical_not(mask)
             old_centroids = torch.logical_not(mask)
@@ -310,6 +335,7 @@ def correct_ToT(pix:np.ndarray,calibrationFile:str) -> np.ndarray:
 
 def correct_ToA(pix:np.ndarray,calibration_file:str):
     '''
+    WORK IN PROGRESS
     Performs the time of arrival (ToA) correction using a calibration file.
     
     Parameters
@@ -334,8 +360,8 @@ def correct_ToA(pix:np.ndarray,calibration_file:str):
     to the TPX3CAM such that the whole sensor front is triggered at about the
     same time.
     '''
-    # generate an array of offsets from the calibration file based on 
-    # pix[0:1,:], then 
+    # generate an array of offsets from the calibration file, then use that as 
+    # as key for pix[0:1,:] to subtract those times from each arrived photon
 
 def find_coincidences(pix:np.ndarray,beams:list[list[Beam]],\
     coincidenceTimeWindow:float) -> np.ndarray:
@@ -492,19 +518,13 @@ def process_Coincidences(inpFile:str,calibrationFile:str,beamSs:list[Beam],\
 if __name__ == '__main__':
     import os
     #import functiontrace
-    #inpFile = os.path.dirname(os.path.realpath(__file__)) + \
-    #          r'/examples/demo_file.tpx3' #example file
-    #(tdc,pix) = parse_raw_file(inpFile)
-    #print(f"TDC data: {tdc}")
-    #print(f"Pix data: {pix}")
+    
     inpFile = os.path.dirname(os.path.realpath(__file__)) + \
         r'/examples/demo_file.tpx3'
     calibFile = os.path.dirname(os.path.realpath(__file__)) + \
         r'/examples/TOT correction curve new firmware GST.txt'
-    #(tdc,pix) = parse_raw_file(inpFile)
     #functiontrace.trace()
     test = process_Coincidences(inpFile, calibFile, [Beam(65, 57, 130, 188)], 
                                 [Beam(130, 57, 195, 188)], 250, 20, 1000, 30, 
                                 20)
     print(test)
-    #cProfile.run('process_Coincidences(inpFile)') # finish this line
