@@ -401,20 +401,22 @@ def find_coincidences(pix: np.ndarray,
     '''
     assert len(beams)>1, f"Need len(beams) > 1, got: {len(beams)}"
 
-    def replace_zeros_with_last_nonzeros(arr:np.ndarray) -> np.ndarray:
+    def replace_zeros_with_last_nonzeros(arr: np.ndarray,
+                                         col: int) -> np.ndarray:
         # Generate an array corresponding to the indices in arr. Then everywhere
-        # that arr["ToA"] is zero, also set the corresponding index to zero.
+        # that arr[col] is zero, also set the corresponding index to zero.
         # Then accumulate the maxmimum of the indices over the indices array.
         # This will look like the following: 
-        #           arr["ToA"] = [0   ,0   ,4e10,0   ,5e10,0   ,0   ,8e10,9e10]
-        #                  idx = [0   ,1   ,2   ,3   ,4   ,5   ,6   ,7   ,8   ]
-        #                  (1)-> [0   ,0   ,2   ,0   ,4   ,0   ,0   ,7   ,8   ]
-        #                  (2)-> [0   ,0   ,2   ,2   ,4   ,4   ,4   ,7   ,8   ]
-        #   => arr["ToA"][idx] = [0   ,0   ,4e10,4e10,5e10,5e10,5e10,8e10,9e10]
+        #          arr[col] = [0   ,0   ,4e10,0   ,5e10,0   ,0   ,8e10,9e10]
+        #               idx = [0   ,1   ,2   ,3   ,4   ,5   ,6   ,7   ,8   ]
+        #               (1)-> [0   ,0   ,2   ,0   ,4   ,0   ,0   ,7   ,8   ]
+        #               (2)-> [0   ,0   ,2   ,2   ,4   ,4   ,4   ,7   ,8   ]
+        #  => arr[col][idx] = [0   ,0   ,4e10,4e10,5e10,5e10,5e10,8e10,9e10]
         # This needs to be done in NumPy since this process cannot be 
         # realistically parallelized in any beneficial way
+        col_vals = asnumpy(arr[col,:]) # only possibly unload from GPU once
         idx = np.arange(arr.shape[1])
-        idx[asnumpy(arr[2,:] == 0)] = 0 # (1)
+        idx[col_vals == 0] = 0 # (1)
         idx = np.maximum.accumulate(idx) # (2)
         return arr[:,xp.asarray(idx)] # possible CuPy conversion for consistency
 
@@ -425,9 +427,12 @@ def find_coincidences(pix: np.ndarray,
         # Fill all entries not within the current beam with 0, then replace each
         # zero entry with the last prior non-zero entry.
         curr = beam_mask(pix,beam,preserveSize=True)
-        coincidences[i,:,:] = replace_zeros_with_last_nonzeros(curr)
+        coincidences[i,:,:] = replace_zeros_with_last_nonzeros(curr, 2) # ToA
     dT = np.amax(coincidences[:,2,:],axis=0) - np.amin(coincidences[:,2,:],axis=0)
-    keepIndices = np.where(dT<coincidenceTimeWindow)[0]
+    # remove entries from outside the coincidence window and also accidental 0s
+    keep = np.logical_and(dT<coincidenceTimeWindow, 
+                          np.all(coincidences[:,2,:] > 0, axis=0))
+    keepIndices = np.where(keep)[0]
 
     return coincidences[:,:,keepIndices]
 
@@ -517,6 +522,11 @@ def process_Coincidences(inpFile: str,
     pix = correct_ToT(pix,calibrationFile)
 
     coincidences = find_coincidences(pix,[beamSs,beamIs],coincidenceTimeWindow)
+    print(f'Signal beam bounds:\n\t{beamSs[0]}')
+    print('Signal bounds:')
+    print(f'\t pos: [{coincidences[1,0,:].min()}, {coincidences[1,1,:].min()}, {coincidences[1,0,:].max()}, {coincidences[1,1,:].max()}]')
+    print(f'\t toa: [{coincidences[1,2,:].min()}, {coincidences[1,2,:].max()}]')
+    print(f'\t times@(0,0): {coincidences[1,2,np.logical_and(coincidences[1,0,:]==0,coincidences[1,1,:]==0)]}')
     return coincidences
     
 if __name__ == '__main__':

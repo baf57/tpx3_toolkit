@@ -142,11 +142,11 @@ def plot_histogram(coincidences:np.ndarray, min_bin=-200, max_bin=200, color='r'
         
     #print(f"{num=} = ({bin_base=}) * ({i-1=})")
 
-    bins = xp.linspace(min_bin,max_bin,num)
+    bins = np.linspace(min_bin,max_bin,num)
     # get difference between signal and idler arrival times
     dt = coincidences[1,2,:] - coincidences[0,2,:]
 
-    ax.hist(dt,bins,color=color)
+    ax.hist(asnumpy(dt),bins,color=color)
 
     return fig
 
@@ -172,7 +172,7 @@ def plot_coincidence_trace(pix:np.ndarray, loc:int, orientation:str,
     else:
         data = view[loc,:]
 
-    ax.bar(xp.arange(data.size)+0.5,data,color='gray')
+    ax.bar(np.arange(data.size)+0.5,asnumpy(data),color='gray')
 
     return (fig,data,view)
 
