@@ -1,7 +1,17 @@
-import torch
 import numpy as np
 from tpx3_toolkit.rust_tpx3 import *
 from scipy.optimize import curve_fit
+
+# CUDA parallelization attempt
+try:
+    import cupy as cp
+    xp = cp
+    asnumpy = cp.asnumpy
+    print("tpx3_toolkit running in CUDA mode")
+except: 
+    xp = np
+    axnumpy = np.asarray
+    print("tpx3_toolkit runnning in CPU mode")
 
 # global variables
 DT = 1.5625 # ns, var for the time bin width
@@ -32,7 +42,7 @@ class Beam:
     def fromString(cls,inp:str):
         inp = inp[1:-1] # remove '[' and ']'
         strings = inp.split(', ')
-        return cls(int(strings[0]), int(strings[1]), \
+        return cls(int(strings[0]), int(strings[1]), 
                    int(strings[2]), int(strings[3]))
 
     def __str__(self):
@@ -65,7 +75,7 @@ class Beam:
 # NumPy functions I want to implement, like np.concatenate().
 
 # wrappers for Rust functions
-def parse_raw_file(inp_file: str) -> tuple[np.ndarray,np.ndarray]:
+def parse_raw_file(inp_file: str) -> tuple[np.ndarray, np.ndarray]:
     ''' 
     Parses the information contained within a '.tpx3' raw data file.
     
@@ -119,10 +129,12 @@ def parse_raw_file(inp_file: str) -> tuple[np.ndarray,np.ndarray]:
     binary processing to extract the x-y coordinates of the Pix data chunk. This
     is also evident in the processing of all the fine and course times
     components.
-    '''
-    return _parse(inp_file)
+    '''    
+    tdc,pix = _parse(inp_file) # type: ignore
+    return (xp.asarray(tdc), xp.asarray(pix))
 
-def chop_large_file(inp_file, max_size=100):
+def chop_large_file(inp_file, 
+                    max_size = 100):
     '''
     Chops a '.tpx3' file into smaller, properly formatted, '.tpx3' files.
     
@@ -143,20 +155,18 @@ def chop_large_file(inp_file, max_size=100):
     If this folder already exists, it and all its contents will be deleted, and
     then a new folder with the new chopping will be created.
     '''
-    _chop(inp_file, max_size)
+    _chop(inp_file, max_size) # type: ignore
 
 
 # functions
 def simplesort(arr,row):
-    # know that arr is almost sorted in all cases, so timsort should be faster
-    # than quicksort
-    if torch.is_tensor(arr):
-        return arr[:,arr[row,:].argsort(stable=True)]
-    else:
-        return arr[:,arr[row,:].argsort(kind="stable")] 
+    # will be either CuPy or NumPy depending on type of arr
+    order = np.argsort(arr[row,:],kind='stable')
+    return arr[:,order] 
 
-def beam_mask(pix:np.ndarray,beamLocations:list[Beam],\
-    preserveSize:bool=False) -> np.ndarray:
+def beam_mask(pix: np.ndarray,
+              beamLocations: list[Beam],
+              preserveSize: bool = False) -> np.ndarray:
     '''
     Masks the input array based on location of the beams.
 
@@ -179,12 +189,13 @@ def beam_mask(pix:np.ndarray,beamLocations:list[Beam],\
         entries are either removed (default, when preserveSize == `False`), or
         set to zero (when preservedSize == `True`).
     '''
-
-    beamMasks = np.full((len(beamLocations),pix.shape[1]),False)
+    beamMasks = xp.full((len(beamLocations),pix.shape[1]),False)
     for beam,i in zip(beamLocations,range(len(beamLocations))):
-        beamMasks[i] = np.all([pix[0,:] >= beam.left,\
-            pix[1,:] >= beam.bottom, pix[0,:] <= beam.right,\
-                pix[1,:] <= beam.top],axis=0)
+        beamMasks[i] = np.logical_and(np.logical_and(np.logical_and(
+            pix[1,:] <= beam.top, 
+            pix[0,:] <= beam.right),
+            pix[1,:] >= beam.bottom), 
+            pix[0,:] >= beam.left) # ugly ANDing for CuPy consistency
     beamMask = np.any(beamMasks,axis=0)
 
     if preserveSize:
@@ -195,12 +206,11 @@ def beam_mask(pix:np.ndarray,beamLocations:list[Beam],\
     
     return out
 
-def clustering(pix:np.ndarray,
-               timeWindow:float,
-               spaceWindow:int,
-               clusterRange:int=4,
-               numScans:int=5,
-               CUDA:bool=False)->np.ndarray:
+def clustering(pix: np.ndarray,
+               timeWindow: float,
+               spaceWindow: int,
+               clusterRange: int=4,
+               numScans: int=5) -> np.ndarray:
     '''
     Parameters
     ----------
@@ -220,10 +230,6 @@ def clustering(pix:np.ndarray,
     numScans: int, optional, default=5
         How many times to repeat this algorithm. Essentially works to increase the 
         clusterRange.
-    CUDA: bool, optional, default=False
-        A flag which determines whether you want to attempt GPU processing via
-        CUDA or not. This does not *guarentee* GPU processing, but it attempts 
-        it.
 
     Returns
     -------
@@ -232,54 +238,40 @@ def clustering(pix:np.ndarray,
         now correspond to single photon events rather than the unclustered photon
         events as in the input array.
     '''
-    if CUDA:
-        # paralellization with PyTorch
-        # try cuda if you can. If not go for CPU and inform
-        try:
-            if torch.cuda.is_available():
-                device = torch.device("cuda:0")
-            else:
-                print("CUDA unavailable, trying CPU processing.")
-                device = torch.device("cpu")
-        except:
-            print("Error using CUDA, trying CPU processing.")
-            device = torch.device("cpu")
-    else:
-        device = torch.device("cpu")
     
-    pix = torch.from_numpy(pix).to(device)
+    pix = xp.asarray(pix)
     pix = simplesort(pix,2)
     pixprev = 0
     for scan in range(numScans):
         for offset in range(1,clusterRange):
-            mask = torch.full((pix.size()[1],), True).to(device)
-            largerToT_mask = torch.logical_not(mask)
-            old_centroids = torch.logical_not(mask)
-            new_centroids = torch.logical_not(mask)
+            mask = xp.full(pix.shape[1], True)
+            largerToT_mask = np.logical_not(mask)
+            old_centroids = np.logical_not(mask)
+            new_centroids = np.logical_not(mask)
 
             # Set mask to False wherever element is part of cluster, i.e. mask[i] 
-            # being False indicates that it is in a cluster with mask[i-j]
+        # being False indicates that it is in a cluster with mask[i-j]
             # (for i >=j). False elements in mask will be discarded
-            mask[offset::offset] = torch.logical_not(\
-                                    torch.logical_and(\
-                                     torch.diff(pix[2,::offset].double()) < timeWindow,\
-                                     torch.sqrt(torch.abs(torch.diff(pix[0,::offset].double()))**2 \
-                                      + torch.abs(torch.diff(pix[1,::offset].double()))**2)  < spaceWindow\
-                                    )\
+            mask[offset::offset] = np.invert(
+                                    np.logical_and(
+                                     np.diff(pix[2,::offset].astype(np.float64)) < timeWindow,
+                                     np.sqrt(np.abs(np.diff(pix[0,::offset].astype(np.float64)))**2 
+                                      + np.abs(np.diff(pix[1,::offset].astype(np.float64)))**2)  < spaceWindow
+                                    )
                                    )
 
             # largerToT_mask[i] is True when ToT[i+j]-ToT[i] > 0. This array
             # is used to identify clusters where the centroid needs to be swapped.
-            largerToT_mask[0:-offset:offset] = torch.diff(pix[3,::offset]) > 0 
+            largerToT_mask[0:-offset:offset] = np.diff(pix[3,::offset]) > 0 
 
             # Identify indices of old centroids which have a element within
             # its cluster with a larger ToT. old_centroids[i] is True where 
             # mask[i] is True and largerToT_mask[i] is True and mask[i+j] is False
-            old_centroids[0:-offset:offset] = torch.logical_and(\
-                                               torch.logical_and(\
-                                                largerToT_mask[0:-offset:offset],\
-                                                mask[0:-offset:offset]),\
-                                               torch.logical_not(mask[offset::offset])\
+            old_centroids[0:-offset:offset] = np.logical_and(
+                                               np.logical_and(
+                                                largerToT_mask[0:-offset:offset],
+                                                mask[0:-offset:offset]),
+                                               np.invert(mask[offset::offset])
                                               )
             new_centroids[offset::offset] = old_centroids[0:-offset:offset]
 
@@ -290,13 +282,16 @@ def clustering(pix:np.ndarray,
             # Throw away elments within identified clusters which are not centroids
             pix = pix[:,mask]
 
-        if pixprev == pix.size()[1]: # convergence check
+        if pixprev == pix.shape[1]: # convergence check
             break
-        pixprev = pix.size()[1]
+        pixprev = pix.shape[1]
         
-    return pix.cpu().numpy()
+    # note that if CuPy was used, pix will be a CuPy array. I don't think this
+    # is an issue, but we'll have to be careful here.
+    return pix
 
-def correct_ToT(pix:np.ndarray,calibrationFile:str) -> np.ndarray:
+def correct_ToT(pix: np.ndarray, 
+                calibrationFile: str) -> np.ndarray:
     '''
     Performs the time of threshold (ToT) correction using a calibration file.
     
@@ -320,6 +315,7 @@ def correct_ToT(pix:np.ndarray,calibrationFile:str) -> np.ndarray:
     ToT curve, then uses this fit to shift the data ToA based on the ToT.
     '''
 
+    # must be done in NumPy to work with curve_fit. But that's ok, it's fast
     file = np.loadtxt(calibrationFile,skiprows=1)
     calibrationToT = file[:,0]
     calibrationdToA = file[:,1]
@@ -333,7 +329,8 @@ def correct_ToT(pix:np.ndarray,calibrationFile:str) -> np.ndarray:
 
     return simplesort(out,2) # sorts array by ToA after the correction
 
-def correct_ToA(pix:np.ndarray,calibration_file:str):
+def correct_ToA(pix: np.ndarray, 
+                calibration_file: str):
     '''
     WORK IN PROGRESS
     Performs the time of arrival (ToA) correction using a calibration file.
@@ -363,8 +360,9 @@ def correct_ToA(pix:np.ndarray,calibration_file:str):
     # generate an array of offsets from the calibration file, then use that as 
     # as key for pix[0:1,:] to subtract those times from each arrived photon
 
-def find_coincidences(pix:np.ndarray,beams:list[list[Beam]],\
-    coincidenceTimeWindow:float) -> np.ndarray:
+def find_coincidences(pix: np.ndarray,
+                      beams: list[list[Beam]],
+                      coincidenceTimeWindow: float) -> np.ndarray:
     '''
     Finds all time coincidences between events in beamPix1 and beamPix2.
 
@@ -413,14 +411,16 @@ def find_coincidences(pix:np.ndarray,beams:list[list[Beam]],\
         #                  (1)-> [0   ,0   ,2   ,0   ,4   ,0   ,0   ,7   ,8   ]
         #                  (2)-> [0   ,0   ,2   ,2   ,4   ,4   ,4   ,7   ,8   ]
         #   => arr["ToA"][idx] = [0   ,0   ,4e10,4e10,5e10,5e10,5e10,8e10,9e10]
+        # This needs to be done in NumPy since this process cannot be 
+        # realistically parallelized in any beneficial way
         idx = np.arange(arr.shape[1])
-        idx[arr[2,:] == 0] = 0 # (1)
+        idx[asnumpy(arr[2,:] == 0)] = 0 # (1)
         idx = np.maximum.accumulate(idx) # (2)
-        return arr[:,idx]
+        return arr[:,xp.asarray(idx)] # possible CuPy conversion for consistency
 
     pix = simplesort(pix,2) # Make sure the array is first sorted!
 
-    coincidences = np.zeros((len(beams),4,pix.shape[1]))
+    coincidences = xp.zeros((len(beams),4,pix.shape[1]))
     for beam,i in zip(beams,range(len(beams))):
         # Fill all entries not within the current beam with 0, then replace each
         # zero entry with the last prior non-zero entry.
@@ -436,10 +436,15 @@ def generate_ToA_correction():
     Placeholder for now
     '''
 
-def process_Coincidences(inpFile:str,calibrationFile:str,beamSs:list[Beam],\
-    beamIs:list[Beam],timeWindow:float,spaceWindow:int,\
-        coincidenceTimeWindow:float,clusterRange:int=0,numScans:int=0)\
-             -> np.ndarray:
+def process_Coincidences(inpFile: str,
+                         calibrationFile: str,
+                         beamSs: list[Beam],
+                         beamIs: list[Beam],
+                         timeWindow: float,
+                         spaceWindow: int,
+                         coincidenceTimeWindow: float,
+                         clusterRange: int=0,
+                         numScans: int=0) -> np.ndarray:
     '''
     Processes a raw tpx3 file to find coincidences between a set of signal and
     idler beams.
@@ -512,19 +517,32 @@ def process_Coincidences(inpFile:str,calibrationFile:str,beamSs:list[Beam],\
     pix = correct_ToT(pix,calibrationFile)
 
     coincidences = find_coincidences(pix,[beamSs,beamIs],coincidenceTimeWindow)
-
     return coincidences
     
 if __name__ == '__main__':
     import os
-    #import functiontrace
+    try:
+        import functiontrace #type: ignore
+    except:
+        pass
     
     inpFile = os.path.dirname(os.path.realpath(__file__)) + \
         r'/examples/demo_file.tpx3'
     calibFile = os.path.dirname(os.path.realpath(__file__)) + \
         r'/examples/TOT correction curve new firmware GST.txt'
-    #functiontrace.trace()
-    test = process_Coincidences(inpFile, calibFile, [Beam(65, 57, 130, 188)], 
-                                [Beam(130, 57, 195, 188)], 250, 20, 1000, 30, 
-                                20)
+        
+    try:
+        functiontrace.trace()
+    except:
+        pass
+    
+    test = process_Coincidences(inpFile, 
+                                calibFile, 
+                                beamSs = [Beam(65, 57, 130, 188)], 
+                                beamIs = [Beam(130, 57, 195, 188)],
+                                timeWindow = 250, 
+                                spaceWindow = 20, 
+                                coincidenceTimeWindow = 1000, 
+                                clusterRange = 30, 
+                                numScans = 20)
     print(test)

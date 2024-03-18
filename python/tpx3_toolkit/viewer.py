@@ -3,7 +3,7 @@ Contains all of the output viewing functions for use with the TimePix3 camera.
 '''
 
 import copy
-from tpx3_toolkit.core import Beam
+from tpx3_toolkit.core import Beam, xp, asnumpy
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
@@ -12,6 +12,12 @@ from matplotlib import colors as c
 from scipy import signal
 import matplotlib.cm as cm
 import numpy as np
+
+try: # optional CuPyx import to circumvent issue with `.at()` ufunc
+    from cupyx import scatter_add
+    add_at = scatter_add
+except:
+    add_at = np.add.at
 
 def plot_hits(pix:np.ndarray,colorMap:str='viridis',fig:Figure=None) -> Figure: #type:ignore
 
@@ -30,11 +36,9 @@ def plot_hits(pix:np.ndarray,colorMap:str='viridis',fig:Figure=None) -> Figure: 
 
 def make_hits_axes(pix:np.ndarray,ax:Axes,colorMap:str='viridis') -> None:
 
-    CCD = np.zeros((256,256))
-    indices = (pix[1,:].astype('int'),pix[0,:].astype('int'))
-    np.add.at(CCD,indices,1) # adds 1 to the CCD value at each hit's (x,y)
-
-    np.add.at(CCD,(150,50),500)
+    CCD = xp.zeros((256,256))
+    indices = (pix[1,:].astype(int),pix[0,:].astype(int))
+    xp.add.at(CCD,indices,1) # adds 1 to the CCD value at each hit's (x,y)
 
     cmap = copy.copy(cm.get_cmap(colorMap))
     if hasattr(cmap,'colors'):
@@ -44,7 +48,7 @@ def make_hits_axes(pix:np.ndarray,ax:Axes,colorMap:str='viridis') -> None:
 
     cutoff = np.max(CCD) * 0.2
 
-    ax.imshow(CCD,origin='lower',aspect='auto',extent=[0,256,0,256],\
+    ax.imshow(asnumpy(CCD),origin='lower',aspect='auto',extent=[0,256,0,256],\
         vmax=cutoff,interpolation='none',cmap=cmap) #type:ignore
 
 def draw_beam_box(ax:Axes,beams:list[Beam],boxColors:list[str]=[]) \
@@ -138,7 +142,7 @@ def plot_histogram(coincidences:np.ndarray, min_bin=-200, max_bin=200, color='r'
         
     #print(f"{num=} = ({bin_base=}) * ({i-1=})")
 
-    bins = np.linspace(min_bin,max_bin,num)
+    bins = xp.linspace(min_bin,max_bin,num)
     # get difference between signal and idler arrival times
     dt = coincidences[1,2,:] - coincidences[0,2,:]
 
@@ -168,7 +172,7 @@ def plot_coincidence_trace(pix:np.ndarray, loc:int, orientation:str,
     else:
         data = view[loc,:]
 
-    ax.bar(np.arange(data.size)+0.5,data,color='gray')
+    ax.bar(xp.arange(data.size)+0.5,data,color='gray')
 
     return (fig,data,view)
 
@@ -206,9 +210,9 @@ def cross_correlation(ref:np.ndarray, target:np.ndarray, flipped=True, plot=True
         ax2 = fig.add_subplot(132)
         ax3 = fig.add_subplot(133)
 
-        ax1.imshow(ref,origin='lower',aspect="equal",interpolation="none")
-        ax2.imshow(target,origin='lower',aspect="equal",interpolation="none")
-        ax3.imshow(cxc,origin='lower',aspect="equal",interpolation="none",vmin=0,vmax=1)
+        ax1.imshow(asnumpy(ref),origin='lower',aspect="equal",interpolation="none")
+        ax2.imshow(asnumpy(target),origin='lower',aspect="equal",interpolation="none")
+        ax3.imshow(asnumpy(cxc),origin='lower',aspect="equal",interpolation="none",vmin=0,vmax=1)
 
         plt.show()
 
@@ -227,7 +231,7 @@ def _make_coincidences_axis(pix:np.ndarray,ax:Axes,\
     else:
         cmap.set_bad(cmap(0)) #type: ignore
 
-    ax.imshow(view,origin='lower',aspect='auto',extent=[0,xrange,0,yrange],\
+    ax.imshow(asnumpy(view),origin='lower',aspect='auto',extent=[0,xrange,0,yrange],\
         interpolation='none',cmap=cmap)
 
     return view
@@ -241,9 +245,9 @@ def _make_view(pix:np.ndarray):
     xrange = int(xmax - xmin)
     yrange = int(ymax - ymin)
 
-    view = np.zeros((yrange+1,xrange+1))
+    view = xp.zeros((yrange+1,xrange+1))
 
-    indices = ((pix[1,:] - ymin).astype('int'),(pix[0,:]-xmin).astype('int'))
-    np.add.at(view,indices,1) # adds 1 to the view value at each hit's (x,y)
+    indices = ((pix[1,:] - ymin).astype(int),(pix[0,:]-xmin).astype(int))
+    add_at(view,indices,1) # adds 1 to the view value at each hit's (x,y)
 
     return (view,xrange,yrange)

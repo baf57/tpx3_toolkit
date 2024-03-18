@@ -1,16 +1,17 @@
 '''
-Contains simulation functions for making fake TPX3 or coincidence data
+Contains simulation functions for making fake TPX3 or coincidence data. The 
+majority of this submodule likely cannot be done in parallel as the typical 
+sizes of added datat well exceed typical VRAM amounts.
 '''
 
-from typing import Union
-from tpx3_toolkit.core import Beam, DT
+from tpx3_toolkit.core import Beam, DT, xp, asnumpy
 import numpy as np
 
 def add_hits(data: np.ndarray, 
-              num: int, 
-              beams: list[Beam],
-              circular_beam: bool = True,
-              verbose: bool = False) -> tuple[np.ndarray, int]:
+             num: int, 
+             beams: list[Beam],
+             circular_beam: bool = True,
+             verbose: bool = False) -> tuple[np.ndarray, int]:
     '''
     Adds simulated hits to an existsing pix array.
     
@@ -55,6 +56,17 @@ def add_hits(data: np.ndarray,
     
     n_bins = int((max(toa_bounds) - min(toa_bounds)) / DT)
     new_n_exp = num / n_bins
+
+    try: # would prefer to change xp, but Python does not allow this, thus flag
+        expected_size = n_bins * 64 # bytes (8 bits, 2x concat size, 4 fields)
+        free_bytes = xp.cuda.Device(0).mem_info[1]
+        if expected_size >= free_bytes:
+            print(f'~{expected_size/(2**30):.2f}GiB of VRAM required, but only {free_bytes/(2**30):.2f}GiB availalbe. Using CPU.')
+            CUDA = False
+        else:
+            CUDA = True
+    except:
+        CUDA = False
     
     if verbose: print(f'calculated n_exp = {new_n_exp:.4f}')
 
@@ -64,11 +76,16 @@ def add_hits(data: np.ndarray,
                         toa_bounds, 
                         tot_bounds,
                         circular_beam,
-                        verbose)
+                        verbose,
+                        CUDA)
 
     if verbose: print(f'\thits generated, concatenating...')
 
-    extended_data = np.concatenate([data,new_hits], axis=1)
+    if CUDA:
+        extended_data = np.concatenate([data,xp.asarray(new_hits)], axis=1)
+    else:
+        extended_data = np.concatenate([asnumpy(data), new_hits])
+
     hits_added = new_hits.shape[1]
     
     if verbose: print(f'Done concatenaing! {hits_added} hits added')
@@ -81,8 +98,12 @@ def _gen_hits(n_exp: float,
               toa_bounds: tuple[float,float],
               tot_bounds: tuple[float,float],
               circ: bool = True,
-              verbose:bool = False) -> np.ndarray:
-    gen = np.random.default_rng()
+              verbose: bool = False,
+              CUDA: bool = False) -> np.ndarray:
+    if CUDA:
+        gen = xp.random.default_rng()
+    else:
+        gen = np.random.default_rng()
     
     ## toa generator
     toa, number = _gen_toas(n_exp, n_bins, toa_bounds, gen, verbose)
@@ -100,7 +121,10 @@ def _gen_hits(n_exp: float,
     if verbose: print(f'tot written\n')
     
     # concatenate
-    new_hits = np.concatenate([pos,toa[np.newaxis,:],tot[np.newaxis,:]],axis=0)
+    new_hits = np.concatenate([pos,
+                               np.expand_dims(toa,axis=0),
+                               np.expand_dim(tot,axis=0)],
+                              axis=0)
     if verbose: print('Concatenated new_hits together\n')
     
     return new_hits
@@ -109,7 +133,8 @@ def _gen_toas(n_exp: float,
               n_bins: int, 
               toa_bounds: tuple[float, float],
               gen: np.random.Generator, 
-              verbose:bool = False):
+              verbose: bool = False,
+              CUDA: bool = False):
     # sequential so that I can see progress as it takes a long time
     if verbose: print(f'{n_bins=} {n_exp=}')
     
@@ -131,7 +156,10 @@ def _gen_toas(n_exp: float,
     toa_dist = np.concatenate(toa_dist_parts).astype(int)
     if verbose: print(f'\n\ttoa dist generated')
     
-    times = (np.arange(1,n_bins+1) * DT) + min(toa_bounds)
+    if CUDA: # see above
+        times = (xp.arange(1,n_bins+1) * DT) + min(toa_bounds)
+    else:
+        times = (np.arange(1,n_bins+1) * DT) + min(toa_bounds)
     toa = np.repeat(times,toa_dist)
     if verbose: print(f'toas generated\n')
     
@@ -152,7 +180,7 @@ def _gen_pos_rect(number: int,
         pos[i,1,:] = (pos[i,1,:] * spread_y) + beam.bottom
     if verbose: print(f'positions generated')
     
-    # should reshape positions and then cut off any excess positions past number
+    # reshape positions and then cut off any excess positions past number
     pos = pos.reshape((2,-1))[:,:number]
     if verbose: print(f'positions reshaped and truncated\n')
     

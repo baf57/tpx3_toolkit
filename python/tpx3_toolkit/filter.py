@@ -3,6 +3,8 @@ Contains filtering functions for filterng timepix data in potentially helpful
 ways.
 '''
 
+from tpx3_toolkit.core import xp
+from tpx3_toolkit.viewer import add_at
 import numpy as np
 
 def time_filter(coincidences:np.ndarray, tmin:float, tmax:float) -> np.ndarray:
@@ -27,7 +29,7 @@ def space_filter(coincidences:np.ndarray, threshold:float) -> np.ndarray:
     time for one iteration, which could lead to the next iteration removing more
     entries.
     '''
-    prev = np.zeros((0,0,0))
+    prev = xp.zeros((0,0,0))
 
     while coincidences.shape[2] != prev.shape[2]:
         xi_min = np.min(coincidences[0,0,:])
@@ -44,14 +46,14 @@ def space_filter(coincidences:np.ndarray, threshold:float) -> np.ndarray:
         yi_range = int(yi_max - yi_min)
         ys_range = int(ys_max - ys_min)
 
-        x_info = np.zeros((xs_range+1,xi_range+1))
-        y_info = np.zeros((ys_range+1,yi_range+1))
+        x_info = xp.zeros((xs_range+1,xi_range+1))
+        y_info = xp.zeros((ys_range+1,yi_range+1))
         x_indices = ((coincidences[1,0,:] - xs_min).astype('int'), \
                 (coincidences[0,0,:] - xi_min).astype('int'))
         y_indices = ((coincidences[1,1,:] - ys_min).astype('int'), \
                 (coincidences[0,1,:] - yi_min).astype('int'))
-        np.add.at(x_info,x_indices,1)
-        np.add.at(y_info,y_indices,1)
+        add_at(x_info,x_indices,1)
+        add_at(y_info,y_indices,1)
 
         x_max = np.max(x_info, axis=None)
         y_max = np.max(x_info, axis=None)
@@ -80,10 +82,11 @@ def bin(coincidences:np.ndarray, xbins:int, ybins:int) -> np.ndarray:
 def space_filter_alt(coincidences:np.ndarray,threshold:float):
     '''
     Establishes a spatial filter which filters the spatial correlations by a
-    percentage of the maximum spatial mode (x and y at the same time).
+    percentage of the maximum spatial mode (x and y at the same time in the 
+    psuedo-4D (xi+xs, yi+ys) space).
     '''
     data = coincidences[0,:,:] + coincidences[1,:,:]
-
+    
     xmin = np.min(data[0,:])
     xmax = np.max(data[0,:])
     ymin = np.min(data[1,:])
@@ -92,13 +95,13 @@ def space_filter_alt(coincidences:np.ndarray,threshold:float):
     xrange = int(xmax - xmin)
     yrange = int(ymax - ymin)
 
-    view = np.zeros((yrange+1,xrange+1))
+    view = xp.zeros((yrange+1,xrange+1))
 
-    indices = ((data[1,:] - ymin).astype('int'), (data[0,:]-xmin).astype('int'))
-    np.add.at(view,indices,1)
+    indices = ((data[1,:] - ymin).astype('int'),(data[0,:]-xmin).astype('int'))
+    add_at(view,indices,1) # adds 1 to the view value at each hit's (x,y)
 
-    mask = view > np.max(view) * threshold
+    mask = view > (np.max(view) * threshold)
 
     f = mask[indices]
 
-    return coincidences[:,:,f]
+    return (coincidences[:,:,f], mask)
