@@ -10,7 +10,8 @@ automatically installed when this toolkit is installed when using `pip`
 * [matplotlib](https://matplotlib.org/)
 
 The following Python package is optional if you decide you can/want to utilize
-parallel processing with CUDA:
+parallel processing with CUDA. You may choose to install it with `pip` 
+separately from the toolkit installation
 * [cupy](https://cupy.dev/)
 
 Along with this, the rust compiler is required to be present on the system to 
