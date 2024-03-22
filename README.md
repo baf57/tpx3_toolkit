@@ -18,5 +18,5 @@ Along with this, the rust compiler is required to be present on the system to
 compile the rust components. Detailed instructions on how to acquire this for
 your specific OS can be found [here](https://www.rust-lang.org/tools/install).
 Lastly, [maturin](https://github.com/PyO3/maturin) may be needed if any rust 
-code edits are performed. This can be installed using `pip` once the rust
+code edits are performed. This can be installed using `cargo` once the rust
 compiler is installed.
