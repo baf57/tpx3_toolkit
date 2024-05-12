@@ -3,8 +3,9 @@ Contains filtering functions for filterng timepix data in potentially helpful
 ways.
 '''
 
+from typing import Callable
 from tpx3_toolkit.core import xp
-from tpx3_toolkit.viewer import add_at
+from tpx3_toolkit.viewer import cross_correlation, _make_view
 import numpy as np
 
 def time_filter(coincidences:np.ndarray, tmin:float, tmax:float) -> np.ndarray:
@@ -52,8 +53,8 @@ def space_filter(coincidences:np.ndarray, threshold:float) -> np.ndarray:
                 (coincidences[0,0,:] - xi_min).astype('int'))
         y_indices = ((coincidences[1,1,:] - ys_min).astype('int'), \
                 (coincidences[0,1,:] - yi_min).astype('int'))
-        add_at(x_info,x_indices,1)
-        add_at(y_info,y_indices,1)
+        xp.add.at(x_info,x_indices,1)
+        xp.add.at(y_info,y_indices,1)
 
         x_max = np.max(x_info, axis=None)
         y_max = np.max(x_info, axis=None)
@@ -79,7 +80,8 @@ def bin(coincidences:np.ndarray, xbins:int, ybins:int) -> np.ndarray:
 
     return coincidences
 
-def space_filter_alt(coincidences:np.ndarray,threshold:float):
+def space_filter_alt(coincidences:np.ndarray,
+                     threshold:float) -> tuple[np.ndarray, np.ndarray]:
     '''
     Establishes a spatial filter which filters the spatial correlations by a
     percentage of the maximum spatial mode (x and y at the same time in the 
@@ -98,10 +100,51 @@ def space_filter_alt(coincidences:np.ndarray,threshold:float):
     view = xp.zeros((yrange+1,xrange+1))
 
     indices = ((data[1,:] - ymin).astype('int'),(data[0,:]-xmin).astype('int'))
-    add_at(view,indices,1) # adds 1 to the view value at each hit's (x,y)
+    xp.add.at(view,indices,1) # adds 1 to the view value at each hit's (x,y)
 
     mask = view > (np.max(view) * threshold)
 
     f = mask[indices]
 
     return (coincidences[:,:,f], mask)
+
+def best_space_filter(coincidences: np.ndarray, 
+                      ref: np.ndarray,
+                      precision: float = 0.01,
+                      filter: Callable[[np.ndarray, float],
+                                       tuple[np.ndarray,np.ndarray]] = space_filter_alt,
+                      which: int = 0) -> tuple[float, np.ndarray]:
+    '''
+    Finds the best space filter for a given data set based on the similarity
+    with a reference view. The percision sets an upper bound for the percision
+    of the threshold value.
+    '''
+    # I tried a lot of things here to make it more efficient (binary, gradient 
+    # decent, annealing, etc.)... this is a really resilient probelm. I am just
+    # going to do the easiest thing and accept that it'll be slow.
+    if which == 0:
+        flipped = True
+    else:
+        flipped = False
+    
+    N = int(np.ceil(1/precision))
+    
+    threshs = np.linspace(0.0, 1.0, num = N+1)
+    
+    vals = np.zeros(N+1)
+    outs = []
+    for i,thresh in enumerate(threshs):
+        try:
+            (out,_) = filter(coincidences, thresh)
+            (view,_,_) = _make_view(out[which,:,:])
+            cxc = cross_correlation(ref, view, flipped, plot=False)
+            outs.append(out)
+            vals[i] = float(cxc.max())
+        except:
+            outs.append(np.nan)
+            vals[i] = np.nan
+            
+    thresh_out = float(threshs[np.nanargmax(vals)])
+    thresh_out = round(thresh_out, -round(np.log10(precision))) # rounds to precision
+        
+    return (thresh_out, outs[np.nanargmax(vals)])

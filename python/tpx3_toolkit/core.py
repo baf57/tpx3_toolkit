@@ -33,17 +33,16 @@ class Beam:
         The pixel value of the top edge of the beam, inclusive
     '''
     def __init__(self,left:int,bottom:int,right:int,top:int):
-        self.left = left
-        self.bottom = bottom
-        self.right = right
-        self.top = top
+        self.left = int(np.clip(left,0,255))
+        self.bottom = int(np.clip(bottom,0,255))
+        self.right = int(np.clip(right,0,255))
+        self.top = int(np.clip(top,0,255))
 
     @classmethod
     def fromString(cls,inp:str):
         inp = inp[1:-1] # remove '[' and ']'
         strings = inp.split(', ')
-        return cls(int(strings[0]), int(strings[1]), 
-                   int(strings[2]), int(strings[3]))
+        return cls(strings[0], strings[1], strings[2], strings[3])
 
     def __str__(self):
         return f"[{self.left}, {self.bottom}, {self.right}, {self.top}]"
@@ -51,11 +50,18 @@ class Beam:
     def toList(self):
         return [self.left,self.bottom,self.right,self.top]
     
+    def in_beam(self, pix):
+        return np.logical_and(np.logical_and(np.logical_and(
+                pix[1] <= self.top, 
+                pix[0] <= self.right),
+                pix[1] >= self.bottom), 
+                pix[0] >= self.left) # ugly ANDing for CuPy consistency
+    
     @property
     def area(self):
         '''Area (in pixels) contained within the beam.'''
-        x_spread = self.right - self.left
-        y_spread = self.top - self.bottom
+        x_spread = (self.right - self.left) + 1
+        y_spread = (self.top - self.bottom) + 1
         return x_spread * y_spread
     
 # Add classes which describes tdc, pix, and coincs. They should all be based
@@ -191,11 +197,7 @@ def beam_mask(pix: np.ndarray,
     '''
     beamMasks = xp.full((len(beamLocations),pix.shape[1]),False)
     for beam,i in zip(beamLocations,range(len(beamLocations))):
-        beamMasks[i] = np.logical_and(np.logical_and(np.logical_and(
-            pix[1,:] <= beam.top, 
-            pix[0,:] <= beam.right),
-            pix[1,:] >= beam.bottom), 
-            pix[0,:] >= beam.left) # ugly ANDing for CuPy consistency
+        beamMasks[i] = beam.in_beam(pix)
     beamMask = np.any(beamMasks,axis=0)
 
     if preserveSize:
@@ -238,6 +240,13 @@ def clustering(pix: np.ndarray,
         now correspond to single photon events rather than the unclustered photon
         events as in the input array.
     '''
+    # This can be memory expensive, so we want to release any GPU memory we can
+    # before we go to run this
+    try:
+        cp.get_default_memory_pool().free_all_blocks()
+    except:
+        # cp not being used
+        pass
     
     pix = xp.asarray(pix)
     pix = simplesort(pix,2)
@@ -399,6 +408,14 @@ def find_coincidences(pix: np.ndarray,
         To get the x-position of the photon from beam1 in coincidence 3 you
         would write `coincidences[1,0,3]`.
     '''
+    # This can be memory expensive, so we want to release any GPU memory we can
+    # before we go to run this
+    try:
+        cp.get_default_memory_pool().free_all_blocks()
+    except:
+        # cp not being used
+        pass
+    
     assert len(beams)>1, f"Need len(beams) > 1, got: {len(beams)}"
 
     def replace_zeros_with_last_nonzeros(arr: np.ndarray,
@@ -522,11 +539,6 @@ def process_Coincidences(inpFile: str,
     pix = correct_ToT(pix,calibrationFile)
 
     coincidences = find_coincidences(pix,[beamSs,beamIs],coincidenceTimeWindow)
-    print(f'Signal beam bounds:\n\t{beamSs[0]}')
-    print('Signal bounds:')
-    print(f'\t pos: [{coincidences[1,0,:].min()}, {coincidences[1,1,:].min()}, {coincidences[1,0,:].max()}, {coincidences[1,1,:].max()}]')
-    print(f'\t toa: [{coincidences[1,2,:].min()}, {coincidences[1,2,:].max()}]')
-    print(f'\t times@(0,0): {coincidences[1,2,np.logical_and(coincidences[1,0,:]==0,coincidences[1,1,:]==0)]}')
     return coincidences
     
 if __name__ == '__main__':
