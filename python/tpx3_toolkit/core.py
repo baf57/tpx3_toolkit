@@ -62,7 +62,13 @@ class Beam:
         '''Area (in pixels) contained within the beam.'''
         x_spread = (self.right - self.left) + 1
         y_spread = (self.top - self.bottom) + 1
-        return x_spread * y_spread
+        return int(x_spread * y_spread)
+    
+    @property
+    def center(self):
+        '''Center of the beam rounded to nearest pixel'''
+        return (int(np.round((self.right + self.left + 1) / 2)), 
+                int(np.round((self.top + self.bottom + 1) / 2)))
     
 # Add classes which describes tdc, pix, and coincs. They should all be based
 # around ndarrays, and just have documentation and getter attributes which make 
