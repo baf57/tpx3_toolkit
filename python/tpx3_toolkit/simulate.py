@@ -9,7 +9,7 @@ from typing import Union
 import numpy as np
 
 def add_coherent(data: np.ndarray, 
-                 num: int, 
+                 num_hits: int, 
                  beams: list[Beam],
                  circular_beam: bool = True,
                  verbose: bool = False) -> tuple[np.ndarray, int]:
@@ -21,7 +21,7 @@ def add_coherent(data: np.ndarray,
     ----------
     data: ndarray
         a pix array as described in t3.core.parse_raw_file()
-    num: int
+    num_hits: int
         the target number of hits to add. This number of hits may not be exactly
         added, but will be used to calculated the expectation value of hits in 
         each temporal mode
@@ -61,7 +61,7 @@ def add_coherent(data: np.ndarray,
     tot_bounds = (maxs[3], mins[3])
     
     n_bins = int((max(toa_bounds) - min(toa_bounds)) / DT)
-    new_n_exp = num / n_bins
+    new_n_exp = num_hits / n_bins
 
     try: # would prefer to change xp, but Python does not allow this, thus flag
         expected_size = n_bins * 64 # bytes (8 bits, 2x concat size, 4 fields)
@@ -75,7 +75,7 @@ def add_coherent(data: np.ndarray,
     except:
         CUDA = False
     
-    if verbose: print(f'calculated n_exp = {new_n_exp:.4f}')
+    #if verbose: print(f'calculated n_exp = {new_n_exp:.4f}')
 
     new_hits = _gen_hits(new_n_exp, 
                         n_bins,
@@ -100,7 +100,7 @@ def add_coherent(data: np.ndarray,
     return extended_data, hits_added
 
 def add_SPDC(data: Union[np.ndarray,None], 
-             num: int, 
+             num_pairs: int, 
              dToA_var: float,
              linear_corr_strength: float,
              beams: list[Beam],
@@ -115,7 +115,7 @@ def add_SPDC(data: Union[np.ndarray,None],
     data: ndarray or None
         a pix array as described in t3.core.parse_raw_file(). If None is given,
         then a new array will be created
-    num: int
+    num_pairs: int
         the target number of hit pairs to add. This number of pairs may not be
         exactly added, but will be used to calculated the expectation value of
         pairs in each temporal mode
@@ -172,7 +172,10 @@ def add_SPDC(data: Union[np.ndarray,None],
         toa_bounds = (mins[2], maxs[2])
         
     n_bins = int((toa_bounds[1] - toa_bounds[0]) / DT)
-    new_n_exp = num / n_bins
+    # increasing number of pairs to acconut for the ones that may fall outside
+    # the beam when generating. I find that ~97% of the hits are preserved, so 
+    # that is how I chose this scale. It's arbitrary-ish, but it works
+    new_n_exp = int(num_pairs/0.97) / n_bins
     
     try: # would prefer to change xp, but Python does not allow this, thus flag
         expected_size = n_bins * 64 # bytes (8 bits, 2x concat size, 4 fields)
@@ -186,7 +189,7 @@ def add_SPDC(data: Union[np.ndarray,None],
     except:
         CUDA = False
     
-    if verbose: print(f'calculated n_exp = {new_n_exp:.4f}')
+    #if verbose: print(f'calculated n_exp = {new_n_exp:.4f}')
     
     new_hits = _gen_pairs(new_n_exp,
                           n_bins,
@@ -197,7 +200,7 @@ def add_SPDC(data: Union[np.ndarray,None],
                           verbose,
                           CUDA)
     
-    if verbose: print(f'\thits generated, concatenating...')
+    if verbose: print(f'hits generated, concatenating to old data...')
 
     if data is not None:
         if CUDA:
@@ -209,7 +212,7 @@ def add_SPDC(data: Union[np.ndarray,None],
             
     hits_added = new_hits.shape[1]
     
-    if verbose: print(f'Done concatenaing! {hits_added} hits added')
+    if verbose: print(f'\nDone concatenaing! {hits_added} hits ({hits_added/2:.0f} pairs) added')
 
     return data_out, hits_added
     
@@ -246,7 +249,7 @@ def _gen_hits(n_exp: float,
                                np.expand_dims(toa,axis=0),
                                np.expand_dim(tot,axis=0)],
                               axis=0)
-    if verbose: print('Concatenated new_hits together\n')
+    if verbose: print('concatenated new_hits together\n')
     
     return new_hits
 
@@ -266,7 +269,7 @@ def _gen_pairs(n_exp: float,
     ## toa generator
     idler_toas, number = _gen_toas(n_exp, n_bins, toa_bounds, gen, verbose, CUDA)
     
-    if verbose: print(f'Generating dToAs...')
+    if verbose: print(f'\tgenerating dToAs...')
     
     # CuPy is behind on the eightball when it comes to the generator 
     # implementation, and so the functional approach must instead be called
@@ -287,27 +290,31 @@ def _gen_pairs(n_exp: float,
         idler_toas = sig_toa_diff + idler_toas
         signal_toas = sig_toa_diff + signal_toas
 
-    if verbose: print(f'toas generated\n')
+    if verbose: print(f'paired toas generated\n')
     
     ## positions generator
     idler_pos, signal_pos = _gen_pos_corr(number, linear_corr_strength, beams, gen,
                                        verbose, CUDA)
+    
+    ## find out-of-beam hits
+    oob_idler = beams[0].in_beam(idler_pos)
+    oob_signal = beams[1].in_beam(signal_pos)
     
     ## tot generator
     idler_tots = xp.zeros(number)
     signal_tots = xp.copy(idler_tots)
     if verbose: print(f'tot written\n')
     
-    # concatenate
-    new_idler_hits = np.concatenate([idler_pos,
-                                     xp.expand_dims(idler_toas,axis=0),
-                                     xp.expand_dims(idler_tots,axis=0)],
+    # concatenate while removing oob hits
+    if verbose: print('concatenating all new hits together...\n')
+    new_idler_hits = np.concatenate([idler_pos[:,oob_idler],
+                                     xp.expand_dims(idler_toas[oob_idler],axis=0),
+                                     xp.expand_dims(idler_tots[oob_idler],axis=0)],
                                     axis=0)
-    new_signal_hits = np.concatenate([signal_pos,
-                                      xp.expand_dims(signal_toas,axis=0),
-                                      xp.expand_dims(signal_tots,axis=0)],
+    new_signal_hits = np.concatenate([signal_pos[:,oob_signal],
+                                      xp.expand_dims(signal_toas[oob_signal],axis=0),
+                                      xp.expand_dims(signal_tots[oob_signal],axis=0)],
                                      axis=0)
-    if verbose: print('Concatenated each set of hits together\n')
     
     new_hits = np.concatenate([new_idler_hits, new_signal_hits], axis=1)
     
@@ -320,7 +327,7 @@ def _gen_toas(n_exp: float,
               verbose: bool = False,
               CUDA: bool = False):
     # sequential so that I can see progress as it takes a long time
-    if verbose: print(f'{n_bins=} {n_exp=}')
+    if verbose: print(f'generating toas\n\t{n_bins=} {n_exp=}')
     
     toa_dist_parts = []
     number = 0
@@ -333,12 +340,12 @@ def _gen_toas(n_exp: float,
     number = int(number)
     
     if verbose:
-        print(f'\t{100:3}% of toa generated')
+        print(f'\t\t{100:3}% of toa generated')
         print(f'\t{number} pairs generated')
-        print(f'\tconcatenating...\n')
+        print(f'\tconcatenating...')
         
     toa_dist = np.concatenate(toa_dist_parts).astype(int)
-    if verbose: print(f'\n\ttoa dist generated')
+    if verbose: print(f'\ttoa dist generated')
     
     # this has some bug if I attempt to make times a cupy array at first. I am
     # getting around this by just doing it as numpy and then casting back to 
@@ -350,7 +357,7 @@ def _gen_toas(n_exp: float,
     #toa = np.repeat(times, asnumpy(toa_dist))
     times = (np.arange(1,n_bins+1) * DT) + min(toa_bounds)
     toa = xp.array(np.repeat(times, asnumpy(toa_dist)))
-    if verbose: print(f'toas generated\n')
+    if verbose: print(f'toas generated')
     
     return toa, number
 
@@ -440,41 +447,45 @@ def _gen_pos_corr(number: int,
         
         # this may create some hits on the edges disproportionally, but it's 
         # hopefully minimal
-        pos[:,0,:] = np.clip(np.round((pos[:,0,:] / np.abs(pos[:,0,:].max())) \
-                                      * width_x) + center[0], 
-                             a_min = beam.left, 
-                             a_max = beam.right)
-        pos[:,1,:] = np.clip(np.round((pos[:,1,:] / np.abs(pos[:,1,:].max())) \
-                                      * width_y) + center[1], 
-                             a_min = beam.bottom, 
-                             a_max = beam.top)
+        pos[:,0,:] = np.round((pos[:,0,:] / np.abs(pos[:,0,:].max()) \
+                                      * width_x) + center[0])
+                             #a_min = beam.left, 
+                             #a_max = beam.right)
+        pos[:,1,:] = np.round((pos[:,1,:] / np.abs(pos[:,1,:].max()) \
+                                      * width_y) + center[1])
+                             #a_min = beam.bottom, 
+                             #a_max = beam.top)
     else:
         beam_i, beam_s = beams # will fail if len(beams)!=2
         
         center_i = beam_i.center
         center_s = beam_s.center
-        width_xi = (beam_i.right - beam_i.left) / 2
-        width_xs = (beam_s.right - beam_s.left) / 2
-        width_yi = (beam_i.top - beam_i.bottom) / 2
-        width_ys = (beam_s.top - beam_s.bottom) / 2
+        width_xi = (beam_i.right - beam_i.left)# / 2
+        width_xs = (beam_s.right - beam_s.left)# / 2
+        width_yi = (beam_i.top - beam_i.bottom)# / 2
+        width_ys = (beam_s.top - beam_s.bottom)# / 2
         
-        print(np.clip(np.round(pos[0,0,:] / np.abs(pos[:,0,:].max()) * width_xi) + center_i[0], beam_i.left, beam_i.right))
-        print(np.clip(np.round(pos[1,0,:] / np.abs(pos[:,0,:].max()) * width_xs) + center_s[0], beam_s.left, beam_s.right))
-        print(np.clip(np.round(pos[0,1,:] / np.abs(pos[:,1,:].max()) * width_yi) + center_i[1], beam_i.bottom, beam_i.top))
-        print(np.clip(np.round(pos[1,1,:] / np.abs(pos[:,1,:].max()) * width_ys) + center_s[1], beam_s.bottom, beam_s.top))
+        # for debugging:
+        #print(np.round((pos[0,0,:] / np.abs(pos[:,0,:].max()) * width_xi) + center_i[0]))
+        #print(np.round((pos[1,0,:] / np.abs(pos[:,0,:].max()) * width_xs) + center_s[0]))
+        #print(np.round((pos[0,1,:] / np.abs(pos[:,1,:].max()) * width_yi) + center_i[1]))
+        #print(np.round((pos[1,1,:] / np.abs(pos[:,1,:].max()) * width_ys) + center_s[1]))
         
-        pos[0,0,:] = np.clip(np.round(pos[0,0,:] / np.abs(pos[:,0,:].max()) * width_xi) + center_i[0], 
-                             beam_i.left,
-                             beam_i.right)
-        pos[1,0,:] = np.clip(np.round(pos[1,0,:] / np.abs(pos[:,0,:].max()) * width_xs) + center_s[0], 
-                             beam_s.left,
-                             beam_s.right)
-        pos[0,1,:] = np.clip(np.round(pos[0,1,:] / np.abs(pos[:,1,:].max()) * width_yi) + center_i[1], 
-                             beam_i.bottom,
-                             beam_i.top)
-        pos[1,1,:] = np.clip(np.round(pos[1,1,:] / np.abs(pos[:,1,:].max()) * width_ys) + center_s[1], 
-                             beam_s.bottom,
-                             beam_s.top)
+        xlimit = np.abs(pos[:,0,:].max())
+        ylimit = np.abs(pos[:,0,:].max())
+        
+        pos[0,0,:] = np.round((pos[0,0,:] / xlimit * width_xi) + center_i[0])
+        #                     beam_i.left,
+        #                     beam_i.right)
+        pos[1,0,:] = np.round((pos[1,0,:] / xlimit * width_xs) + center_s[0])
+        #                     beam_s.left,
+        #                     beam_s.right)
+        pos[0,1,:] = np.round((pos[0,1,:] / ylimit * width_yi) + center_i[1])
+        #                     beam_i.bottom,
+        #                     beam_i.top)
+        pos[1,1,:] = np.round((pos[1,1,:] / ylimit * width_ys) + center_s[1])
+        #                     beam_s.bottom,
+        #                     beam_s.top)
         
     if verbose: print(f'positions generated')
     
