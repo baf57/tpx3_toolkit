@@ -10,7 +10,7 @@ try:
     print("tpx3_toolkit running in CUDA mode")
 except: 
     xp = np
-    axnumpy = np.asarray
+    asnumpy = np.asarray
     print("tpx3_toolkit runnning in CPU mode")
 
 # global variables
@@ -66,9 +66,9 @@ class Beam:
     
     @property
     def center(self):
-        '''Center of the beam rounded to nearest pixel'''
-        return (int(np.round((self.right + self.left + 1) / 2)), 
-                int(np.round((self.top + self.bottom + 1) / 2)))
+        '''Center of the beam (not rounded!)'''
+        return ((self.right + self.left) / 2, 
+                (self.top + self.bottom) / 2)
     
 # Add classes which describes tdc, pix, and coincs. They should all be based
 # around ndarrays, and just have documentation and getter attributes which make 

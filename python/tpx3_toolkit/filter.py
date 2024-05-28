@@ -194,8 +194,8 @@ def best_space_filter(coincidences: np.ndarray,
     return (thresh_out, outs[np.nanargmax(vals)])
 
 def g2(coincidences: np.ndarray) -> tuple[np.ndarray,np.ndarray]:
-    data_i = coincidences[0,:,:] # idler events
-    data_s = coincidences[1,:,:] # signal events
+    data_i = coincidences[0,:,:] # idler events (singles)
+    data_s = coincidences[1,:,:] # signal events (singles)
     data_sum = data_i + data_s # idler + signal (paired AND summed) events
     
     xmin_i = np.min(data_i[0,:])
@@ -224,12 +224,12 @@ def g2(coincidences: np.ndarray) -> tuple[np.ndarray,np.ndarray]:
     view_s = view_i.copy()                 # <I(k_xs, k_ys)>
     view_sum = view_i.copy().T             # <I(k_xi+k_xs, k_yi+k_ys)>
 
-    indices_i = (((data_i[0,:] - xmin_i) + ((xrange+1) / 4)).astype('int'),
-                 ((data_i[1,:] - ymin_i) + ((yrange+1) / 4)).astype('int'))
-    indices_s = (((data_s[0,:] - xmin_s) + ((xrange+1) / 4)).astype('int'),
-                 ((data_s[1,:] - ymin_s) + ((yrange+1) / 4)).astype('int'))
-    indices_sum = ((data_sum[1,:] - ymin_sum).astype('int'),
-                   (data_sum[0,:] - xmin_sum).astype('int'))
+    indices_i = (((data_i[0,:] - xmin_i) + ((xrange+1) / 4)).astype('int'), # k_xi
+                 ((data_i[1,:] - ymin_i) + ((yrange+1) / 4)).astype('int')) # k_yi
+    indices_s = (((data_s[0,:] - xmin_s) + ((xrange+1) / 4)).astype('int'), # k_xs
+                 ((data_s[1,:] - ymin_s) + ((yrange+1) / 4)).astype('int')) # k_ys
+    indices_sum = ((data_sum[1,:] - ymin_sum).astype('int'), # k_yi + k_ys
+                   (data_sum[0,:] - xmin_sum).astype('int')) # k_xi + k_ys
     
     np.add.at(view_i,indices_i,1) # adds 1 to the view value at each hit's (x,y)
     np.add.at(view_s,indices_s,1)
@@ -246,7 +246,7 @@ def g2(coincidences: np.ndarray) -> tuple[np.ndarray,np.ndarray]:
     norm = np.outer(norm_x, norm_y) / ((norm_x.max() + norm_y.max()) / 2)
     
     with np.errstate(divide='ignore'):
-        # <I(k_xi+k_xs, k_yi+k_ys)> / <I(k_xi, k_xs)> + <I(k_yi, k_ys)>
+        # <I(k_xi+k_xs, k_yi+k_ys)> / (<I(k_xi, k_xs)> + <I(k_yi, k_ys)>)
         view = view_sum / norm
     view[norm==0] = np.nan
     

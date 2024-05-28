@@ -13,8 +13,11 @@ import matplotlib.cm as cm
 import numpy as np
 import scipy.ndimage as snd_np
 from scipy import signal as signal_np
-from cupyx.scipy import signal
-import cupyx.scipy.ndimage as snd
+try:
+    from cupyx.scipy import signal
+    import cupyx.scipy.ndimage as snd
+except:
+    pass
 
 def plot_hits(pix:np.ndarray,
               colorMap:str='viridis',
