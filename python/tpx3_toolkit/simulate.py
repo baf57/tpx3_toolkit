@@ -204,15 +204,21 @@ def add_SPDC(data: Union[np.ndarray,None],
 
     if data is not None:
         if CUDA:
-            data_out = np.concatenate([data,xp.asarray(new_hits)], axis=1)
+            data_out_pre = np.concatenate([data,xp.asarray(new_hits)], axis=1)
         else:
-            data_out = np.concatenate([asnumpy(data), new_hits])
+            data_out_pre = np.concatenate([asnumpy(data), new_hits])
     else:
-        data_out = new_hits
+        data_out_pre = new_hits
             
     hits_added = new_hits.shape[1]
     
     if verbose: print(f'\nDone concatenaing! {hits_added} hits ({hits_added/2:.0f} pairs) added')
+    
+    # CUDA output if possible
+    try:
+        data_out = xp.array(data_out_pre)
+    except:
+        data_out = data_out_pre
 
     return data_out, hits_added
     
@@ -301,19 +307,23 @@ def _gen_pairs(n_exp: float,
     oob_signal = beams[1].in_beam(signal_pos)
     
     ## tot generator
-    idler_tots = xp.zeros(number)
-    signal_tots = xp.copy(idler_tots)
+    if CUDA:
+        idler_tots = xp.zeros(number)
+        signal_tots = xp.copy(idler_tots)
+    else:
+        idler_tots = np.zeros(number)
+        signal_tots = np.copy(idler_tots)
     if verbose: print(f'tot written\n')
     
     # concatenate while removing oob hits
     if verbose: print('concatenating all new hits together...\n')
     new_idler_hits = np.concatenate([idler_pos[:,oob_idler],
-                                     xp.expand_dims(idler_toas[oob_idler],axis=0),
-                                     xp.expand_dims(idler_tots[oob_idler],axis=0)],
+                                     np.expand_dims(idler_toas[oob_idler],axis=0),
+                                     np.expand_dims(idler_tots[oob_idler],axis=0)],
                                     axis=0)
     new_signal_hits = np.concatenate([signal_pos[:,oob_signal],
-                                      xp.expand_dims(signal_toas[oob_signal],axis=0),
-                                      xp.expand_dims(signal_tots[oob_signal],axis=0)],
+                                      np.expand_dims(signal_toas[oob_signal],axis=0),
+                                      np.expand_dims(signal_tots[oob_signal],axis=0)],
                                      axis=0)
     
     new_hits = np.concatenate([new_idler_hits, new_signal_hits], axis=1)
@@ -356,7 +366,11 @@ def _gen_toas(n_exp: float,
     #    times = (np.arange(1,n_bins+1) * DT) + min(toa_bounds)
     #toa = np.repeat(times, asnumpy(toa_dist))
     times = (np.arange(1,n_bins+1) * DT) + min(toa_bounds)
-    toa = xp.array(np.repeat(times, asnumpy(toa_dist)))
+    toa = np.repeat(times, asnumpy(toa_dist))
+    
+    if CUDA:
+        toa = xp.array(toa)
+    
     if verbose: print(f'toas generated')
     
     return toa, number
