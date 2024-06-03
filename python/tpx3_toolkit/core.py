@@ -178,7 +178,8 @@ def simplesort(arr,row):
 
 def beam_mask(pix: np.ndarray,
               beamLocations: list[Beam],
-              preserveSize: bool = False) -> np.ndarray:
+              preserveSize: bool = False,
+              mask_value: float = 0) -> np.ndarray:
     '''
     Masks the input array based on location of the beams.
 
@@ -208,7 +209,7 @@ def beam_mask(pix: np.ndarray,
 
     if preserveSize:
         out = pix.copy()
-        out[:,beamMask] = 0
+        out[:,beamMask] = mask_value
     else:
         out = pix[:,beamMask]
     
@@ -375,7 +376,7 @@ def correct_ToA(pix: np.ndarray,
     # generate an array of offsets from the calibration file, then use that as 
     # as key for pix[0:1,:] to subtract those times from each arrived photon
 
-def find_coincidences(pix: np.ndarray,
+def find_coincidences_old(pix: np.ndarray,
                       beams: list[list[Beam]],
                       coincidenceTimeWindow: float) -> np.ndarray:
     '''
@@ -458,6 +459,149 @@ def find_coincidences(pix: np.ndarray,
     keepIndices = np.where(keep)[0]
 
     return coincidences[:,:,keepIndices]
+
+def find_coincidences(pix: np.ndarray,
+                          beams: list[list[Beam]],
+                          coincidenceTimeWindow: float,
+                          verbose: bool = False) -> np.ndarray:
+    '''
+    Finds all time coincidences between events in beamPix1 and beamPix2.
+
+    Parameters
+    ----------
+    pix: np.ndarray
+        An array of pix values. See `parse_raw_file`.
+    beams: list[list[Beam]]
+        A list of Beam objects which defines the locations where entries in the
+        pix array will be tagged as coming from beam i. `len(beams)` must be 2+.
+    coincidenceTimeWindow (ns): float
+        The amount of time which any possible coincidences must be considered 
+        betweents. That is, for any event, this is a lower bound for the maximum
+        time difference between the event and all other events that are 
+        considered in coincidencing. In other words, for a given event, 
+        max(dt) > coincidenceTimeWindow, so all events where 
+        dt <= coincidenceTimeWindow will be considered.
+
+    Returns
+    -------
+    coincidences: np.ndarray
+        An array of paired pix values from beam0, beam1, ..., beam(i-1), beami,
+        respectively, which are considred to be coincident with one another in
+        time. Beami is referenced by the following:
+            [i,:,:]:
+                the beami info with each entry the same as in `pix` from
+                `parse_raw_file`
+
+    Notes
+    -----
+        The coincidences array dtype fields start from the zeroeth beam and count
+    up, corresponding to the respective entries in the `beams` list. Thus, the
+    coincidence entries corresponding to the beam defined in the zeroeth slot of
+    the beams list would be indexed by `coincidences[0,:,:]`, while the
+    entries corresponding to the beam defined in the first slot would be
+    `coincidences[1,:,:]`, etc.
+        To get the x-position of the photon from beam1 in coincidence 3 you
+        would write `coincidences[1,0,3]`.
+        
+        This algorithm had the capacity to be very slow. I highly suggest
+    choosing a small value for coincidenceTimeWindow. The old algorithm is left
+    as it does work decently well for some scenarios. This will be rewritten 
+    more efficiently in Rust in the futures.
+    '''
+    # This algo is too memory expensive for CuPy sadly. I need to rewrite this
+    # in Rust, but not now
+    
+    assert len(beams)>1, f"Need len(beams) > 1, got: {len(beams)}"
+    
+    def shift_and_pair(pix, coinc_indices, total_coincs, pix_shifted, shift, 
+                       stop, flag, verbose=False):
+        # coinc_indices is essentially passed by reference
+        if shift == 1:
+            pix_shifted = np.pad(pix_shifted,
+                                ((0,0),(1,0)),
+                                constant_values=np.NaN)[:,:-1]
+        elif shift == -1:
+            pix_shifted = np.pad(pix_shifted,
+                                ((0,0),(0,1)),
+                                constant_values=np.NaN)[:,1:]
+        else:
+            print(f'ERROR: shift must be 1 or -1 (shift is {shift})')
+            
+        dt = pix[2,:] - pix_shifted[2,:]
+        keep = np.argwhere(np.abs(dt) <= coincidenceTimeWindow)
+       
+        if verbose: 
+            if shift == 1:
+                print(f'\tmin(dt_forward) = {np.nanmin(np.abs(dt))}')
+            else:
+                print(f'\tmin(dt_backward) = {np.nanmin(np.abs(dt))}',end='\n')
+            
+            print(f'\t{keep.size=}')
+        
+        if keep.size == 0: # none to keep => all(dt) > coincidenceTimeWindow
+            stop = pix.shape[1] - i
+            flag = False
+        else:
+            coinc_indices.append((keep[:,0], (keep - int(i * shift))[:,0]))
+            total_coincs += keep.shape[0]
+        
+        return total_coincs, pix_shifted, stop, flag
+    
+    pix = simplesort(pix,2)
+    
+    pix_idl = beam_mask(pix, beams[0], True, np.NaN)
+    pix_sig = beam_mask(pix, beams[1], True, np.NaN)
+    
+    forward_flag = True
+    backward_flag = True
+    stop = pix.shape[1]//2 # by default, the stop is the halfway
+    
+    pix_shifted_forward = pix_sig.copy()
+    pix_shifted_backward = pix_sig.copy()
+    
+    coinc_indices = []
+    total_coincs = 0
+    
+    # this could run up to the size of the array since the backward and forward
+    # differences could be different. Genereally this should not happen.
+    for i in range(1,(pix.shape[1])):
+        if verbose:
+            print(f'Shift {i:10.0f}/{stop:.0f}:')
+        if not(forward_flag or backward_flag) or i >= stop:
+            # flags => timeCoincidenceWindow found for both
+            # stop => checked all values in array
+            break
+        
+        if forward_flag:
+            total_coincs, pix_shifted_forward, stop, forward_flag = \
+                shift_and_pair(pix_idl, coinc_indices, total_coincs, 
+                               pix_shifted_forward, 1, stop, forward_flag, 
+                               verbose)
+            
+        if backward_flag:
+            total_coincs, pix_shifted_backward, stop, backward_flag = \
+                shift_and_pair(pix_idl, coinc_indices, total_coincs, 
+                               pix_shifted_backward, -1, stop, backward_flag, 
+                               verbose)
+        
+    # must catch scenario where the whole array is traversed, but it was odd 
+    # size, and thus one more forward (or backward) difference must be checked.
+    # The likelihood of this occuring is very rare, but possible
+    if pix.shape[1] % 2 == 1 and forward_flag and backward_flag:
+        total_coincs, pix_shifted_forward, stop, forward_flag = \
+            shift_and_pair(pix_idl, coinc_indices, total_coincs, 
+                           pix_shifted_forward, 1, stop, forward_flag, verbose)
+        
+    coincidences = np.zeros((2,4,total_coincs))
+    start_ind = 0
+    for pairs in coinc_indices:
+        end_ind = start_ind + pairs[0].shape[0]
+        coincidences[:,:,start_ind:end_ind] = np.stack([pix[:,pairs[0]],
+                                                        pix[:,pairs[1]]],
+                                                       axis=0)
+        start_ind = end_ind
+        
+    return coincidences
 
 def generate_ToA_correction():
     '''
