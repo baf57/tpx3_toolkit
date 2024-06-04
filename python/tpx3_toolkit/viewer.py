@@ -3,7 +3,8 @@ Contains all of the output viewing functions for use with the TimePix3 camera.
 '''
 
 import copy
-from tpx3_toolkit.core import Beam, xp, asnumpy
+from tpx3_toolkit.core import Beam, xp, asnumpy, DT
+from matplotlib import colormaps
 import matplotlib.pyplot as plt
 from matplotlib.figure import Figure
 from matplotlib.axes import Axes
@@ -78,7 +79,9 @@ def draw_beam_box(ax:Axes,
 
 def plot_coincidences(coincidences:np.ndarray,
                       colorMap:str='',
-                      fig:Figure=None) -> Figure: #type: ignore
+                      fig:Figure=None,
+                      ax_signal:Axes=None,
+                      ax_idler:Axes=None,) -> Figure: #type: ignore
 
     if colorMap == '':
         # default red color map to look like a laser idk
@@ -90,9 +93,9 @@ def plot_coincidences(coincidences:np.ndarray,
         fig = plt.figure(figsize=(12,6))
         ax_signal = fig.add_subplot(122)
         ax_idler = fig.add_subplot(121)
-    else:
+    elif ax_signal is None and ax_idler is None:
         [ax_idler,ax_signal] = fig.axes
-
+            
     idl = _make_coincidences_axis(coincidences[0,:,:],ax_idler,colorMap)
     sig = _make_coincidences_axis(coincidences[1,:,:],ax_signal,colorMap)
 
@@ -103,12 +106,14 @@ def plot_coincidences(coincidences:np.ndarray,
 
 def plot_correlations(coincidences:np.ndarray,
                       colorMap:str="gray",
-                      fig:Figure=None) -> Figure: #type:ignore
+                      fig:Figure=None,
+                      ax_x:Axes=None,
+                      ax_y:Axes=None) -> Figure: #type:ignore
     if fig is None:
         fig = plt.figure(figsize=(12,6))
         ax_x = fig.add_subplot(121)
         ax_y = fig.add_subplot(122)
-    else:
+    elif ax_x is None and ax_y is None:
         [ax_x,ax_y] = fig.axes
 
     _make_coincidences_axis(coincidences[:,0,:],ax_x,colorMap)
@@ -125,12 +130,10 @@ def plot_correlations(coincidences:np.ndarray,
 
 
 def plot_histogram(coincidences:np.ndarray, 
-                   min_bin=-200, 
-                   max_bin=200, 
-                   color='r',
-                   num=126,
-                   #subsections=2,
-                   fig:Figure=None) -> Figure:
+                   width=200, # ns
+                   num=4, # num of DTs per bin
+                   color='r', # bar color
+                   fig:Figure=None) -> tuple[Figure,np.ndarray]:
     if fig is None:
         fig = plt.figure(figsize=(4,8))
         ax = fig.add_axes([0,0,1,1])
@@ -140,23 +143,19 @@ def plot_histogram(coincidences:np.ndarray,
     ax.set_xlabel("dt [ns]")
     ax.set_ylabel("Count")
     
-    # calculate bins to be almost a multiple of 65 so there's no artifacts from
-    # binning. I don't remember why, but I know this works
-    #ratio = (max_bin - min_bin) / 100
-    #num = int(round(65/subsections) * ratio - (ratio - 1))
+    spacing = DT * num
     
-    # fixing edge effects
-    if min_bin > 0: min_bin += 1
-    if min_bin <= 0: min_bin -= 1
-    if max_bin >= 0: max_bin += 1
-    if max_bin < 0: max_bin -= 1
+    width_bin = int(round((width - spacing/2) / spacing))
+    min_val = -width_bin * spacing - spacing/2
+    max_val = width_bin * spacing + spacing/2
+    num_bins = (width_bin + 1) * 2
     
-    bins = np.linspace(min_bin,max_bin,num)
+    bins = np.linspace(min_val,max_val,num_bins)
     dt = coincidences[1,2,:] - coincidences[0,2,:]
 
-    ax.hist(asnumpy(dt),bins,color=color)
+    vals,_,_ = ax.hist(asnumpy(dt),bins,color=color)
 
-    return fig
+    return fig, vals
 
 def plot_coincidence_trace(pix:np.ndarray, 
                            loc:int, 
@@ -204,6 +203,90 @@ def plot_coincidence_xy(correlations:np.ndarray,
     ax.set_ylabel(r'$y_{idl} + y_{sig}$')
 
     return (fig,view)
+
+def full_filter_plot(time_filtered_data:np.ndarray,
+                     bg_data:np.ndarray) -> tuple[Figure, np.ndarray]:
+    # This creates a full filter plot to show all the steps of the filtering 
+    # processs in a convenient way
+
+    # need to import this here to avoid a circular import
+    from tpx3_toolkit.filter import space_filter_g2
+    
+    fig = plt.figure(figsize=(6*2,6*5+1))
+    axs = fig.subplot_mosaic('''
+                            DDEE
+                            AABB
+                            CCFF
+                            GGJJ
+                            HHII
+                            ''')
+
+    plot_coincidences(time_filtered_data, colorMap='viridis', fig=fig, 
+                             ax_signal=axs['D'], ax_idler=axs['E'])
+    axs['D'].set_xlabel("$k_x$", fontsize=16)
+    axs['D'].set_ylabel("$k_y$", fontsize=16)
+    axs['D'].set_title("Direct Signal Momentum", fontsize=16)
+    axs['E'].set_xlabel("$k_x$", fontsize=16)
+    axs['E'].set_ylabel("$k_y$", fontsize=16)
+    axs['E'].set_title("Direct Idler Momentum", fontsize=16)
+
+    plot_correlations(time_filtered_data, colorMap='viridis', fig=fig,
+                             ax_x=axs['A'], ax_y=axs['B'])
+    axs['A'].set_xlabel("$k_s$", fontsize=16)
+    axs['A'].set_ylabel("$k_i$", fontsize=16)
+    axs['A'].set_title("Momentum X-Component Correlation", fontsize=16)
+    axs['B'].set_xlabel("$k_s$", fontsize=16)
+    axs['B'].set_ylabel("$k_i$", fontsize=16)
+    axs['B'].set_title("Momentum Y-Component Correlation", fontsize=16)
+
+    fig.sca(axs['C'])
+    plot_coincidence_xy(time_filtered_data,fig=fig)
+    axs['C'].set_facecolor(colormaps['viridis'](0))
+    axs['C'].set_xlabel('$(k_s + k_i)_x$', fontsize=16)
+    axs['C'].set_ylabel('$(k_s + k_i)_y$', fontsize=16)
+    axs['C'].set_title("Momentum Sum Correlation ($k_s + k_i$)", fontsize=16)
+    
+    fig.sca(axs['F'])
+    plot_coincidence_xy(bg_data,fig=fig)
+    axs['F'].set_facecolor(colormaps['viridis'](0))
+    axs['F'].set_xlabel('$(k_s + k_i)_x$', fontsize=16)
+    axs['F'].set_ylabel('$(k_s + k_i)_y$', fontsize=16)
+    axs['F'].set_title("Normalization", fontsize=16)
+    
+    left = min(axs['C'].get_xlim()[0], axs['F'].get_xlim()[0])
+    right = max(axs['C'].get_xlim()[1], axs['F'].get_xlim()[1])
+    bottom = min(axs['C'].get_ylim()[0], axs['F'].get_ylim()[0])
+    top = max(axs['C'].get_ylim()[1], axs['F'].get_ylim()[1])
+    
+    space_filtered_data, mask, g_2 = \
+        space_filter_g2(time_filtered_data, bg_data)
+
+    axs['G'].imshow(asnumpy(g_2), origin='lower', aspect='equal', 
+                    interpolation='none', extent=[left,right,bottom,top])
+    axs['G'].set_facecolor(colormaps['viridis'](0))
+    axs['G'].set_xlabel('$(k_s + k_i)_x$', fontsize=16)
+    axs['G'].set_ylabel('$(k_s + k_i)_y$', fontsize=16)
+    axs['G'].set_title("$g(2)$", fontsize=16)
+
+    axs['J'].imshow(asnumpy(np.where(mask,g_2,0)), origin='lower', aspect='equal', 
+                    interpolation='none', extent=[left,right,bottom,top])
+    axs['J'].set_facecolor(colormaps['viridis'](0))
+    axs['J'].set_xlabel('$(k_s + k_i)_x$', fontsize=16)
+    axs['J'].set_ylabel('$(k_s + k_i)_y$', fontsize=16)
+    axs['J'].set_title("$g(2) > 2$", fontsize=16)
+
+    plot_coincidences(space_filtered_data, colorMap='viridis', fig=fig, 
+                             ax_signal=axs['H'], ax_idler=axs['I'])
+    axs['H'].set_xlabel("$k_x$", fontsize=16)
+    axs['H'].set_ylabel("$k_y$", fontsize=16)
+    axs['H'].set_title("Filtered Signal Momentum", fontsize=16)
+    axs['I'].set_xlabel("$k_x$", fontsize=16)
+    axs['I'].set_ylabel("$k_y$", fontsize=16)
+    axs['I'].set_title("Filtered Idler Momentum", fontsize=16)
+    
+    fig.tight_layout()
+    
+    return fig, space_filtered_data
 
 def cross_correlation(ref:np.ndarray, 
                       target:np.ndarray, 

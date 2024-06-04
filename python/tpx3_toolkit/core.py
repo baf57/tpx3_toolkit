@@ -42,7 +42,8 @@ class Beam:
     def fromString(cls,inp:str):
         inp = inp[1:-1] # remove '[' and ']'
         strings = inp.split(', ')
-        return cls(strings[0], strings[1], strings[2], strings[3])
+        return cls(int(strings[0]), int(strings[1]), 
+                   int(strings[2]), int(strings[3]))
 
     def __str__(self):
         return f"[{self.left}, {self.bottom}, {self.right}, {self.top}]"
@@ -461,9 +462,9 @@ def find_coincidences_old(pix: np.ndarray,
     return coincidences[:,:,keepIndices]
 
 def find_coincidences(pix: np.ndarray,
-                          beams: list[list[Beam]],
-                          coincidenceTimeWindow: float,
-                          verbose: bool = False) -> np.ndarray:
+                      beams: list[list[Beam]],
+                      coincidenceTimeWindow: float,
+                      verbose: bool = False) -> np.ndarray:
     '''
     Finds all time coincidences between events in beamPix1 and beamPix2.
 
@@ -549,8 +550,12 @@ def find_coincidences(pix: np.ndarray,
     
     pix = simplesort(pix,2)
     
-    pix_idl = beam_mask(pix, beams[0], True, np.NaN)
-    pix_sig = beam_mask(pix, beams[1], True, np.NaN)
+    # cannot be done in CuPY :(
+    pix_idl = asnumpy(beam_mask(pix, beams[0], True, np.NaN))
+    pix_sig = asnumpy(beam_mask(pix, beams[1], True, np.NaN))
+    if verbose:
+        print(f'Number in idler: {np.isfinite(pix_idl).sum(axis=1)[0]}')
+        print(f'Number in signal: {np.isfinite(pix_sig).sum(axis=1)[0]}\n')
     
     forward_flag = True
     backward_flag = True
@@ -566,7 +571,7 @@ def find_coincidences(pix: np.ndarray,
     # differences could be different. Genereally this should not happen.
     for i in range(1,(pix.shape[1])):
         if verbose:
-            print(f'Shift {i:10.0f}/{stop:.0f}:')
+            print(f'Shift {i:3.0f}/{stop:.0f}:')
         if not(forward_flag or backward_flag) or i >= stop:
             # flags => timeCoincidenceWindow found for both
             # stop => checked all values in array
@@ -592,7 +597,8 @@ def find_coincidences(pix: np.ndarray,
             shift_and_pair(pix_idl, coinc_indices, total_coincs, 
                            pix_shifted_forward, 1, stop, forward_flag, verbose)
         
-    coincidences = np.zeros((2,4,total_coincs))
+    # this can be CuPy though! :)
+    coincidences = xp.zeros((2,4,total_coincs))
     start_ind = 0
     for pairs in coinc_indices:
         end_ind = start_ind + pairs[0].shape[0]
