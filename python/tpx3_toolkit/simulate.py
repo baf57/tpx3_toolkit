@@ -12,6 +12,7 @@ def add_coherent(data: np.ndarray,
                  num_hits: int, 
                  beams: list[Beam],
                  circular_beam: bool = True,
+                 time: Union[float,None]=None,
                  verbose: bool = False) -> tuple[np.ndarray, int]:
     '''
     Adds simulated hits to an existsing pix array, within the bounds of said 
@@ -19,8 +20,9 @@ def add_coherent(data: np.ndarray,
     
     Parameters 
     ----------
-    data: ndarray
-        a pix array as described in t3.core.parse_raw_file()
+    data: ndarray or None
+        a pix array as described in t3.core.parse_raw_file(). If None is given,
+        then a new array will be created
     num_hits: int
         the target number of hits to add. This number of hits may not be exactly
         added, but will be used to calculated the expectation value of hits in 
@@ -31,6 +33,10 @@ def add_coherent(data: np.ndarray,
     circular_beam: bool, optional, default=True
         if True, then hits are added in an oval which best fits within each
         given beam. Otherwise the hits are added in the entire beam area
+    time: float or None, optional, default=None
+        the amount of time in seconds over which the events should be added. If
+        data is None, then this time must be set. Otherwise this will be
+        determined by the min and max ToA of data.
     verbose: bool, optional, default=False
         if True, progress info will be printed to the console. This is generally
         a long process, so such info can be helpful
@@ -54,11 +60,20 @@ def add_coherent(data: np.ndarray,
     whatsoever. This is equivalent to an external source of uncorrelated light
     following poissonian statistics.
     '''
-    maxs = np.max(data,axis=1)
-    mins = np.min(data,axis=1)
+    if num_hits == 0:
+        return data, 0
     
-    toa_bounds = (maxs[2], mins[2])
-    tot_bounds = (maxs[3], mins[3])
+    if data is None:
+        assert time is not None, f'If creating a new data array, then the ' + \
+                                 'time parameter must not be None'
+        toa_bounds = (0, time*10**9)
+        tot_bounds = (0, 0)
+    else:
+        maxs = data.max(axis=1)
+        mins = data.min(axis=1)
+        
+        toa_bounds = (float(mins[2]), float(maxs[2]))
+        tot_bounds = (float(maxs[3]), float(mins[3]))
     
     n_bins = int((max(toa_bounds) - min(toa_bounds)) / DT)
     new_n_exp = num_hits / n_bins
@@ -75,8 +90,6 @@ def add_coherent(data: np.ndarray,
     except:
         CUDA = False
     
-    #if verbose: print(f'calculated n_exp = {new_n_exp:.4f}')
-
     new_hits = _gen_hits(new_n_exp, 
                         n_bins,
                         beams, 
@@ -88,16 +101,17 @@ def add_coherent(data: np.ndarray,
 
     if verbose: print(f'\thits generated, concatenating...')
 
-    if CUDA:
-        extended_data = np.concatenate([data,xp.asarray(new_hits)], axis=1)
+    # CUDA output if possible
+    if data is not None:
+        data_out = np.concatenate([data,xp.asarray(new_hits)], axis=1)
     else:
-        extended_data = np.concatenate([asnumpy(data), new_hits])
+        data_out = xp.array(new_hits)
 
     hits_added = new_hits.shape[1]
     
     if verbose: print(f'Done concatenaing! {hits_added} hits added')
 
-    return extended_data, hits_added
+    return data_out, hits_added
 
 def add_SPDC(data: Union[np.ndarray,None], 
              num_pairs: int, 
@@ -161,15 +175,20 @@ def add_SPDC(data: Union[np.ndarray,None],
     the center, but correlated. The ToT tends to not really matter at this 
     point, so it is just generated as 0 for all hits for now.
     '''
+    if num_pairs == 0:
+        return data, 0
+    
     if data is None:
         assert time is not None, f'If creating a new data array, then the ' + \
                                  'time parameter must not be None'
         toa_bounds = (0, time*10**9)
+        tot_bounds = (0, 0)
     else:
         maxs = data.max(axis=1)
         mins = data.min(axis=1)
         
-        toa_bounds = (mins[2], maxs[2])
+        toa_bounds = (float(mins[2]), float(maxs[2]))
+        tot_bounds = (float(maxs[3]), float(mins[3]))
         
     n_bins = int((toa_bounds[1] - toa_bounds[0]) / DT)
     # increasing number of pairs to acconut for the ones that may fall outside
@@ -196,29 +215,22 @@ def add_SPDC(data: Union[np.ndarray,None],
                           dToA_var,
                           beams,
                           toa_bounds,
+                          tot_bounds,
                           linear_corr_strength,
                           verbose,
                           CUDA)
     
     if verbose: print(f'hits generated, concatenating to old data...')
 
+    # CUDA output if possible
     if data is not None:
-        if CUDA:
-            data_out_pre = np.concatenate([data,xp.asarray(new_hits)], axis=1)
-        else:
-            data_out_pre = np.concatenate([asnumpy(data), new_hits])
+        data_out = np.concatenate([data,xp.asarray(new_hits)], axis=1)
     else:
-        data_out_pre = new_hits
+        data_out = xp.array(new_hits)
             
     hits_added = new_hits.shape[1]
     
-    if verbose: print(f'\nDone concatenaing! {hits_added} hits ({hits_added/2:.0f} pairs) added')
-    
-    # CUDA output if possible
-    try:
-        data_out = xp.array(data_out_pre)
-    except:
-        data_out = data_out_pre
+    if verbose: print(f'\nDone concatenaing! {hits_added} events ({hits_added/2:.0f} pairs) added')
 
     return data_out, hits_added
     
@@ -240,9 +252,9 @@ def _gen_hits(n_exp: float,
     
     ## positions generator
     if circ:
-        pos = _gen_pos_circ(number, beams, gen, verbose)
+        pos = _gen_pos_circ(number, beams, gen, verbose, CUDA)
     else:
-        pos = _gen_pos_rect(number, beams, gen, verbose)
+        pos = _gen_pos_rect(number, beams, gen, verbose, CUDA)
     
     ## tot generator
     tot_range = max(tot_bounds) - min(tot_bounds)
@@ -253,7 +265,7 @@ def _gen_hits(n_exp: float,
     # concatenate
     new_hits = np.concatenate([pos,
                                np.expand_dims(toa,axis=0),
-                               np.expand_dim(tot,axis=0)],
+                               np.expand_dims(tot,axis=0)],
                               axis=0)
     if verbose: print('concatenated new_hits together\n')
     
@@ -264,6 +276,7 @@ def _gen_pairs(n_exp: float,
                dToA_var: float,
                beams: list[Beam],
                toa_bounds: tuple[float,float],
+               tot_bounds: tuple[float,float],
                linear_corr_strength: float,
                verbose: bool = False,
                CUDA: bool = False) -> np.ndarray:
@@ -307,23 +320,20 @@ def _gen_pairs(n_exp: float,
     oob_signal = beams[1].in_beam(signal_pos)
     
     ## tot generator
-    if CUDA:
-        idler_tots = xp.zeros(number)
-        signal_tots = xp.copy(idler_tots)
-    else:
-        idler_tots = np.zeros(number)
-        signal_tots = np.copy(idler_tots)
+    tot_range = max(tot_bounds) - min(tot_bounds)
+    
+    tot = min(tot_bounds) + (gen.random(number) * tot_range)
     if verbose: print(f'tot written\n')
     
     # concatenate while removing oob hits
     if verbose: print('concatenating all new hits together...\n')
     new_idler_hits = np.concatenate([idler_pos[:,oob_idler],
                                      np.expand_dims(idler_toas[oob_idler],axis=0),
-                                     np.expand_dims(idler_tots[oob_idler],axis=0)],
+                                     np.expand_dims(tot[oob_idler],axis=0)],
                                     axis=0)
     new_signal_hits = np.concatenate([signal_pos[:,oob_signal],
                                       np.expand_dims(signal_toas[oob_signal],axis=0),
-                                      np.expand_dims(signal_tots[oob_signal],axis=0)],
+                                      np.expand_dims(tot[oob_signal],axis=0)],
                                      axis=0)
     
     new_hits = np.concatenate([new_idler_hits, new_signal_hits], axis=1)
@@ -351,7 +361,7 @@ def _gen_toas(n_exp: float,
     
     if verbose:
         print(f'\t\t{100:3}% of toa generated')
-        print(f'\t{number} pairs generated')
+        print(f'\t{number} events generated')
         print(f'\tconcatenating...')
         
     toa_dist = np.concatenate(toa_dist_parts).astype(int)
@@ -380,7 +390,7 @@ def _gen_pos_rect(number: int,
                   gen: np.random.Generator,
                   verbose:bool = False) -> np.ndarray:
         
-    pos = gen.random((len(beams), 2, np.ceil(number/len(beams))))
+    pos = gen.random((len(beams), 2, int(np.ceil(number/len(beams)))))
     if verbose: print(f'position generator values made')
     
     for i,beam in enumerate(beams):
@@ -392,6 +402,7 @@ def _gen_pos_rect(number: int,
     
     # reshape positions and then cut off any excess positions past number
     pos = pos.reshape((2,-1))[:,:number]
+    gen.shuffle(pos,axis=1) # randomize order
     if verbose: print(f'positions reshaped and truncated\n')
     
     return pos
@@ -399,7 +410,8 @@ def _gen_pos_rect(number: int,
 def _gen_pos_circ(number: int,
                   beams: list[Beam],
                   gen: np.random.Generator,
-                  verbose:bool = False) -> np.ndarray:
+                  verbose:bool = False,
+                  CUDA:bool = False) -> np.ndarray:
     centers = []
     width_x = []
     width_y = []
@@ -408,7 +420,7 @@ def _gen_pos_circ(number: int,
         width_x.append((beam.right - beam.left) / 2)
         width_y.append((beam.top - beam.bottom) / 2)
         
-    rands = gen.random((len(beams), 2, np.ceil(number/len(beams))))
+    rands = gen.random((len(beams), 2, int(np.ceil(number/len(beams)))))
     if verbose: print(f'position generator values made')
     pos = np.zeros((2,number))
     if verbose: print(f'position output allocated')
@@ -419,13 +431,14 @@ def _gen_pos_circ(number: int,
         high_idx = min((i+1) * rands.shape[2], number)
         
         r = np.sqrt(rands[i,0,:])
-        theta = rands[i,1,:] * 2 * np.pi
+        theta = rands[i,1,:] * 2 * np.pi 
         
         # surprisingly, this scaling method does actually preserve uniformity
         pos[0,low_idx:high_idx] = np.floor(centers[i][0] + \
-            (r * np.cos(theta) * width_x))
+            (r * np.cos(theta) * width_x[i]))[:(high_idx-low_idx)]
         pos[1,low_idx:high_idx] = np.floor(centers[i][1] + \
-            (r * np.sin(theta) * width_y)) 
+            (r * np.sin(theta) * width_y[i]))[:(high_idx-low_idx)]
+    gen.shuffle(pos,axis=1) # randomize order
     if verbose: print(f'positions generated')
     
     return pos
