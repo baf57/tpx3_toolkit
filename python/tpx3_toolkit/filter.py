@@ -4,9 +4,10 @@ ways.
 '''
 
 from typing import Callable, Union
-from tpx3_toolkit.core import xp
+from tpx3_toolkit.core import xp, asnumpy
 from tpx3_toolkit.viewer import cross_correlation, _make_view
 import numpy as np
+from scipy.optimize import curve_fit
 
 def time_filter(coincidences:np.ndarray, tmin:float, tmax:float) -> np.ndarray:
     '''
@@ -196,23 +197,14 @@ def best_space_filter(coincidences: np.ndarray,
     return (thresh_out, outs[np.nanargmax(vals)])
 
 def g2(coincidences: np.ndarray,
-       background: np.ndarray) -> tuple[np.ndarray,np.ndarray]:
+       background: np.ndarray,
+       cutoff: float = 1) -> tuple[np.ndarray,np.ndarray]:
     data_i = coincidences[0,:,:] # idler events (singles)
     data_s = coincidences[1,:,:] # signal events (singles)
-    bg_i = coincidences[0,:,:] # idler background events (singles)
-    bg_s = coincidences[1,:,:] # signal background events (singles)
+    bg_i = background[0,:,:] # idler background events (singles)
+    bg_s = background[1,:,:] # signal background events (singles)
     data_sum = data_i + data_s # idler + signal (paired AND summed) events
     bg_sum = bg_i + bg_s # idler + signal background events
-    
-    #xmin_i = np.min(data_i[0,:])
-    #xmax_i = np.max(data_i[0,:])
-    #ymin_i = np.min(data_i[1,:])
-    #ymax_i = np.max(data_i[1,:])
-    
-    #xmin_s = np.min(data_s[0,:])
-    #xmax_s = np.max(data_s[0,:])
-    #ymin_s = np.min(data_s[1,:])
-    #ymax_s = np.max(data_s[1,:])
     
     xmin_sum = np.min(data_sum[0,:])
     xmax_sum = np.max(data_sum[0,:])
@@ -224,41 +216,110 @@ def g2(coincidences: np.ndarray,
     ymin_bg_sum = np.min(bg_sum[1,:])
     ymax_bg_sum = np.max(bg_sum[1,:])
     
-    xrange = int(xmax_sum - xmin_sum)
-    yrange = int(ymax_sum - ymin_sum)
+    xrange_sum = int(xmax_sum - xmin_sum)
+    yrange_sum = int(ymax_sum - ymin_sum)
+    xrange_bg_sum = int(xmax_bg_sum - xmin_bg_sum)
+    yrange_bg_sum = int(ymax_bg_sum - ymin_bg_sum)
+    xrange_diff = xrange_bg_sum - xrange_sum
+    yrange_diff = yrange_bg_sum - yrange_sum
     
-    #view_i = np.zeros((xrange+1,yrange+1)) # <I(k_xi, k_yi)>
-    #view_s = view_i.copy()                 # <I(k_xs, k_ys)>
-    view_sum = xp.zeros((xrange+1,yrange+1))# <I(k_xi+k_xs, k_yi+k_ys)>
-    view_bg = view_sum.copy()            # <I(k_xi+k_xs, k_yi+k_ys)>_uc
+    # <I(k_xi+k_xs, k_yi+k_ys)I(k_xi+k_xs, k_yi+k_ys)>
+    view_sum = xp.zeros((yrange_sum+1,xrange_sum+1))
+    # <I(k_xi+k_xs, k_yi+k_ys)><I(k_xi+k_xs, k_yi+k_ys)>
+    view_bg = xp.zeros((yrange_bg_sum+1,xrange_bg_sum+1))
 
-    #indices_i = (((data_i[0,:] - xmin_i) + ((xrange+1) / 4)).astype('int'), # k_xi
-    #             ((data_i[1,:] - ymin_i) + ((yrange+1) / 4)).astype('int')) # k_yi
-    #indices_s = (((data_s[0,:] - xmin_s) + ((xrange+1) / 4)).astype('int'), # k_xs
-    #             ((data_s[1,:] - ymin_s) + ((yrange+1) / 4)).astype('int')) # k_ys
     indices_sum = ((data_sum[1,:] - ymin_sum).astype('int'), # k_yi + k_ys
                    (data_sum[0,:] - xmin_sum).astype('int')) # k_xi + k_ys
-    indices_bg_sum = ((bg_sum[1,:] - ymin_sum).astype('int'), # (k_yi + k_ys)_uc
-                      (bg_sum[0,:] - bg_sum).astype('int')) # (k_xi + k_ys)_uc
+    indices_bg_sum = ((bg_sum[1,:] - ymin_bg_sum).astype('int'), # (k_yi + k_ys)_uc
+                      (bg_sum[0,:] - xmin_bg_sum).astype('int')) # (k_xi + k_ys)_uc
     
-    #np.add.at(view_i,indices_i,1) # adds 1 to the view value at each hit's (x,y)
-    #np.add.at(view_s,indices_s,1)
     xp.add.at(view_sum,indices_sum,1)
     xp.add.at(view_bg,indices_bg_sum,1)
     
-    #view_i_x = np.sum(view_i,axis=0) / (xrange+1) # <I(k_xi)>
-    #view_i_y = np.sum(view_i,axis=1) / (yrange+1) # <I(k_yi)>
-    #view_s_x = np.sum(view_s,axis=0) / (xrange+1) # <I(k_xs)>
-    #view_s_y = np.sum(view_s,axis=1) / (yrange+1) # <I(k_ys)>
+    # DEBUG for size issue if it ever comes up   
+    #print(f'Before: {view_sum.shape=}, {view_bg.shape=}')
     
-    #norm_x = view_i_x + view_s_x # <I(k_xi)> + <I(k_xs)>
-    #norm_y = view_i_y + view_s_y # <I(k_yi)> + <I(k_ys)>
-    ## <I(k_xi, k_xs)> + <I(k_yi, k_ys)>
-    #norm = np.outer(norm_x, norm_y) / ((norm_x.max() + norm_y.max()) / 2)
+    if xrange_diff > 0: # bg_x > sum_x -> make bg_x smaller
+        xlow = int(xrange_diff / 2)
+        xhigh = -xlow
+        if xrange_diff % 2 == 1: # xrange_diff is odd
+            xlow += 1
+            
+        view_bg = view_bg[:,xlow:xhigh]
+    elif xrange_diff < 0: # bg_x < sum_x -> make bg_x bigger
+        padleft = int(-xrange_diff/2)
+        padright = padleft
+        if xrange_diff % 2 == 1:
+            padright += 1
+            
+        view_bg = np.pad(view_bg,
+                  ((0,0),
+                   (padleft,padright)),
+                  mode='edge') # pads with edge to not mess up the fit much
+        
+    if yrange_diff > 0: # bg_y > sum_y -> make bg_y smaller
+        ylow = int(yrange_diff / 2)
+        yhigh = -ylow
+        if yrange_diff % 2 == 1: # yrange_diff is odd
+            ylow += 1
+            
+        view_bg = view_bg[ylow:yhigh,:]
+    elif yrange_diff < 0: # bg_y < sum_y -> make bg_y bigger
+        padbot = int(-yrange_diff/2)
+        padtop = padbot
+        if yrange_diff % 2 == 1:
+            padbot += 1
+            
+        view_bg = np.pad(view_bg,
+                  ((padtop,padbot), # top <-> bot
+                   (0,0)),
+                  mode='edge') # pads with edge to not mess up the fit much
     
+    # DEBUG for size issue if it ever comes up   
+    #print(f'After: {view_sum.shape=}, {view_bg.shape=}')
+    
+    view_bg = _fit_normalization(view_bg) # throwing a fit
+    view_bg[view_bg<cutoff] = cutoff # this prevents explosive values
+            
     with np.errstate(divide='ignore'):
-        # <I(k_xi+k_xs, k_yi+k_ys)> / (<I(k_xi, k_xs)> + <I(k_yi, k_ys)>)
+        # <I(k_xi+k_xs, k_yi+k_ys)I(k_xi+k_xs, k_yi+k_ys)> / 
+        # <I(k_xi+k_xs, k_yi+k_ys)><I(k_xi+k_xs, k_yi+k_ys)>
         view = view_sum / view_bg
-    view[view_bg==0] = np.nan
     
     return view, indices_sum
+
+def _fit_normalization(background):
+    # CuPy has no 'curve_fit' function, and I don't feel like implementing it
+    # using polyfit, so the easy solution is to just convert to numpy then back
+    # to CuPy. These arrays are small anyway
+    def gen_2dgauss(x0, y0):
+        def two_gauss(xy, A, sigma_x, sigma_y, theta, P):
+                x, y = xy
+                a = (np.cos(theta)**2)/(2*sigma_x**2) + \
+                    (np.sin(theta)**2)/(2*sigma_y**2)
+                b = -(np.sin(2*theta))/(4*sigma_x**2) + \
+                    (np.sin(2*theta))/(4*sigma_y**2)
+                c = (np.sin(theta)**2)/(2*sigma_x**2) + \
+                    (np.cos(theta)**2)/(2*sigma_y**2)
+                    
+                B = a * ((x-x0)**2)
+                C = 2*b * (x-x0)*(y-y0)
+                D = c * ((y-y0)**2)
+                
+                g = A*np.exp(-(B + C + D)**P)
+                
+                return g.ravel()
+        return two_gauss
+
+    background = asnumpy(background)
+    x_bg = np.arange(background.shape[1])
+    y_bg = np.arange(background.shape[0])
+    xy_bg = np.meshgrid(x_bg, y_bg)
+    x0 = x_bg.mean()
+    y0 = y_bg.mean()
+    
+    bg_gauss = gen_2dgauss(x0, y0)
+    popt, _ = curve_fit(bg_gauss, xy_bg, background.ravel())
+    bg_fit = xp.array(bg_gauss(xy_bg, *popt).reshape(xy_bg[0].shape))
+    
+    return bg_fit

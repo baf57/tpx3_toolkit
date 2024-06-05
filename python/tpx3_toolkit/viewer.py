@@ -199,8 +199,8 @@ def plot_coincidence_xy(correlations:np.ndarray,
     data = correlations[0,:,:] + (sign/np.abs(sign)) * correlations[1,:,:]
     view = _make_coincidences_axis(data,ax,colorMap)
 
-    ax.set_xlabel(r'$x_{idl} + x_{sig}$')
-    ax.set_ylabel(r'$y_{idl} + y_{sig}$')
+    ax.set_xlabel(rf'$x_{{idl}} {"+" if sign==1 else "-"} x_{{sig}}$')
+    ax.set_ylabel(rf'$y_{{idl}} {"+" if sign==1 else "-"} y_{{sig}}$')
 
     return (fig,view)
 
@@ -210,7 +210,7 @@ def full_filter_plot(time_filtered_data:np.ndarray,
     # processs in a convenient way
 
     # need to import this here to avoid a circular import
-    from tpx3_toolkit.filter import space_filter_g2
+    from tpx3_toolkit.filter import space_filter_g2, _fit_normalization
     
     fig = plt.figure(figsize=(6*2,6*5+1))
     axs = fig.subplot_mosaic('''
@@ -247,11 +247,18 @@ def full_filter_plot(time_filtered_data:np.ndarray,
     axs['C'].set_title("Momentum Sum Correlation ($k_s + k_i$)", fontsize=16)
     
     fig.sca(axs['F'])
-    plot_coincidence_xy(bg_data,fig=fig)
+    _,bg_view = plot_coincidence_xy(bg_data,fig=fig)
+    bg_fitted = _fit_normalization(bg_view)
+    contours = axs['F'].contour(asnumpy(bg_fitted), 
+                                levels = \
+                                    np.concatenate([np.linspace(0,1,num=5),
+                                                    np.linspace(1,1.5,num=5)]),
+                                colors='w')
+    axs['F'].clabel(contours, contours.levels, inline=True, fontsize=10)
     axs['F'].set_facecolor(colormaps['viridis'](0))
     axs['F'].set_xlabel('$(k_s + k_i)_x$', fontsize=16)
     axs['F'].set_ylabel('$(k_s + k_i)_y$', fontsize=16)
-    axs['F'].set_title("Normalization", fontsize=16)
+    axs['F'].set_title("Normalization (Fit contours shown)", fontsize=16)
     
     left = min(axs['C'].get_xlim()[0], axs['F'].get_xlim()[0])
     right = max(axs['C'].get_xlim()[1], axs['F'].get_xlim()[1])
@@ -260,16 +267,20 @@ def full_filter_plot(time_filtered_data:np.ndarray,
     
     space_filtered_data, mask, g_2 = \
         space_filter_g2(time_filtered_data, bg_data)
+        
+    scale_max = g_2[75:-75,75:-75].max()
 
     axs['G'].imshow(asnumpy(g_2), origin='lower', aspect='equal', 
-                    interpolation='none', extent=[left,right,bottom,top])
+                    interpolation='none', extent=[left,right,bottom,top],
+                    vmax=scale_max)
     axs['G'].set_facecolor(colormaps['viridis'](0))
     axs['G'].set_xlabel('$(k_s + k_i)_x$', fontsize=16)
     axs['G'].set_ylabel('$(k_s + k_i)_y$', fontsize=16)
     axs['G'].set_title("$g(2)$", fontsize=16)
 
     axs['J'].imshow(asnumpy(np.where(mask,g_2,0)), origin='lower', aspect='equal', 
-                    interpolation='none', extent=[left,right,bottom,top])
+                    interpolation='none', extent=[left,right,bottom,top],
+                    vmax=scale_max)
     axs['J'].set_facecolor(colormaps['viridis'](0))
     axs['J'].set_xlabel('$(k_s + k_i)_x$', fontsize=16)
     axs['J'].set_ylabel('$(k_s + k_i)_y$', fontsize=16)
