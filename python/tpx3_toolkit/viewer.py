@@ -251,7 +251,8 @@ def full_filter_plot(time_filtered_data:np.ndarray,
     bg_fitted = _fit_normalization(bg_view)
     contours = axs['F'].contour(asnumpy(bg_fitted), 
                                 levels = \
-                                    np.concatenate([np.linspace(0,1,num=5),
+                                    np.concatenate([np.linspace(0,1,num=5,
+                                                                endpoint=False),
                                                     np.linspace(1,1.5,num=5)]),
                                 colors='w')
     axs['F'].clabel(contours, contours.levels, inline=True, fontsize=10)
