@@ -8,6 +8,7 @@ from tpx3_toolkit.core import xp, asnumpy
 from tpx3_toolkit.viewer import cross_correlation, _make_view
 import numpy as np
 from scipy.optimize import curve_fit
+from scipy.ndimage import gaussian_filter,generic_filter
 
 def time_filter(coincidences:np.ndarray, tmin:float, tmax:float) -> np.ndarray:
     '''
@@ -138,19 +139,27 @@ def space_filter_internal(coincidences:np.ndarray,
 def space_filter_g2(coincidences:np.ndarray,
                     background:np.ndarray,
                     lower_limit:float = 2.0,
-                    upper_limit: Union[float, None] = None) \
+                    upper_limit: Union[float, None] = None,
+                    norm_scale: float = 1.0,
+                    norm_cutoff: float = 1.0,
+                    norm_fit: bool = True,
+                    norm_smooth: bool = False,
+                    neighbors: bool = False) \
                         -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     '''
     Perfoms a filter based off of the statistical independence test as defined
     by the "g2" metric. The upper_limit is optional in case I decide to use it 
     to avoid artifacts.
     '''
-    view_g2, indices_sum = g2(coincidences,background)
+    view_g2, indices_sum = g2(coincidences,background,norm_cutoff,norm_scale,
+                              norm_fit, norm_smooth)
     
     mask = (view_g2 > lower_limit) & np.isfinite(view_g2)
     if upper_limit is not None:
         mask = mask & (view_g2 < upper_limit)
         
+    if neighbors:
+        mask = _g2_neighbors(mask) # another type of smoothing essentially
     f = mask[indices_sum]
     
     return (coincidences[:,:,f], mask, view_g2)
@@ -198,7 +207,10 @@ def best_space_filter(coincidences: np.ndarray,
 
 def g2(coincidences: np.ndarray,
        background: np.ndarray,
-       cutoff: float = 1) -> tuple[np.ndarray,np.ndarray]:
+       cutoff: float = 1.0,
+       norm_scale: float = 1.0,
+       fit: bool = True,
+       smooth: bool = False) -> tuple[np.ndarray,np.ndarray]:
     data_i = coincidences[0,:,:] # idler events (singles)
     data_s = coincidences[1,:,:] # signal events (singles)
     bg_i = background[0,:,:] # idler background events (singles)
@@ -245,7 +257,10 @@ def g2(coincidences: np.ndarray,
         if xrange_diff % 2 == 1: # xrange_diff is odd
             xlow += 1
             
-        view_bg = view_bg[:,xlow:xhigh]
+        if xhigh == 0: # why not be consistent with -0 indexing NumPy ???
+            view_bg = view_bg[:,xlow:]
+        else:
+            view_bg = view_bg[:,xlow:xhigh]
     elif xrange_diff < 0: # bg_x < sum_x -> make bg_x bigger
         padleft = int(-xrange_diff/2)
         padright = padleft
@@ -262,8 +277,11 @@ def g2(coincidences: np.ndarray,
         yhigh = -ylow
         if yrange_diff % 2 == 1: # yrange_diff is odd
             ylow += 1
-            
-        view_bg = view_bg[ylow:yhigh,:]
+           
+        if yhigh == 0:
+            view_bg = view_bg[ylow:,:]
+        else: 
+            view_bg = view_bg[ylow:yhigh,:]
     elif yrange_diff < 0: # bg_y < sum_y -> make bg_y bigger
         padbot = int(-yrange_diff/2)
         padtop = padbot
@@ -277,9 +295,13 @@ def g2(coincidences: np.ndarray,
     
     # DEBUG for size issue if it ever comes up   
     #print(f'After: {view_sum.shape=}, {view_bg.shape=}')
+    view_bg = view_bg * norm_scale
     
-    view_bg = _fit_normalization(view_bg) # throwing a fit
+    if fit:
+        view_bg = _fit_normalization(view_bg) # throwing a fit
     view_bg[view_bg<cutoff] = cutoff # this prevents explosive values
+    if smooth:
+        view_bg = _smooth_correlations(view_bg,1) # smooths the correlations
             
     with np.errstate(divide='ignore'):
         # <I(k_xi+k_xs, k_yi+k_ys)I(k_xi+k_xs, k_yi+k_ys)> / 
@@ -292,8 +314,8 @@ def _fit_normalization(background):
     # CuPy has no 'curve_fit' function, and I don't feel like implementing it
     # using polyfit, so the easy solution is to just convert to numpy then back
     # to CuPy. These arrays are small anyway
-    def gen_2dgauss(x0, y0):
-        def two_gauss(xy, A, sigma_x, sigma_y, theta, P):
+    def gen_2dgauss(A, x0, y0):
+        def two_gauss(xy, sigma_x, sigma_y, theta, P):
                 x, y = xy
                 a = (np.cos(theta)**2)/(2*sigma_x**2) + \
                     (np.sin(theta)**2)/(2*sigma_y**2)
@@ -315,11 +337,31 @@ def _fit_normalization(background):
     x_bg = np.arange(background.shape[1])
     y_bg = np.arange(background.shape[0])
     xy_bg = np.meshgrid(x_bg, y_bg)
+    xx_bg, yy_bg = xy_bg
     x0 = x_bg.mean()
     y0 = y_bg.mean()
+    A = background[np.sqrt((x0-xx_bg)**2 + (y0-yy_bg)**2)<10].mean()
     
-    bg_gauss = gen_2dgauss(x0, y0)
+    bg_gauss = gen_2dgauss(A, x0, y0)
     popt, _ = curve_fit(bg_gauss, xy_bg, background.ravel())
     bg_fit = xp.array(bg_gauss(xy_bg, *popt).reshape(xy_bg[0].shape))
     
     return bg_fit
+
+def _smooth_correlations(correlations,strength):
+    correlations = gaussian_filter(asnumpy(correlations),strength)
+    return xp.array(correlations)
+
+def _g2_neighbors(correlations):
+    def check_neighbors(array):
+        if array[2] == 1:
+            return array.mean() > 0.5
+        return False
+    
+    footprint = np.array([[1,1,1],
+                          [1,1,1],
+                          [1,1,1]])
+    correlations = generic_filter(asnumpy(correlations), check_neighbors, 
+                                  footprint=footprint)
+    
+    return xp.array(correlations)

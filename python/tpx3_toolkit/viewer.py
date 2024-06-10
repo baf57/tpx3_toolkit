@@ -81,7 +81,8 @@ def plot_coincidences(coincidences:np.ndarray,
                       colorMap:str='',
                       fig:Figure=None,
                       ax_signal:Axes=None,
-                      ax_idler:Axes=None,) -> Figure: #type: ignore
+                      ax_idler:Axes=None,
+                      flipped:tuple[bool]=(False,False)) -> Figure: #type: ignore
 
     if colorMap == '':
         # default red color map to look like a laser idk
@@ -96,8 +97,10 @@ def plot_coincidences(coincidences:np.ndarray,
     elif ax_signal is None and ax_idler is None:
         [ax_idler,ax_signal] = fig.axes
             
-    idl = _make_coincidences_axis(coincidences[0,:,:],ax_idler,colorMap)
-    sig = _make_coincidences_axis(coincidences[1,:,:],ax_signal,colorMap)
+    idl = _make_coincidences_axis(coincidences[0,:,:],ax_idler,colorMap,
+                                  flipped[0])
+    sig = _make_coincidences_axis(coincidences[1,:,:],ax_signal,colorMap,
+                                  flipped[1])
 
     ax_signal.set_title("Signal")
     ax_idler.set_title("Idler")
@@ -189,7 +192,8 @@ def plot_coincidence_trace(pix:np.ndarray,
 def plot_coincidence_xy(correlations:np.ndarray, 
                         sign:int=1,
                         colorMap:str='viridis', 
-                        fig:Figure=None) -> tuple[Figure, np.ndarray]:
+                        fig:Figure=None,
+                        scaling_factor:float=1.0) -> tuple[Figure, np.ndarray]:
     if fig is None:
         fig = plt.figure(figsize=(4,8))
         ax = fig.add_axes([0,0,1,1])
@@ -197,15 +201,23 @@ def plot_coincidence_xy(correlations:np.ndarray,
         ax = fig.gca()
 
     data = correlations[0,:,:] + (sign/np.abs(sign)) * correlations[1,:,:]
-    view = _make_coincidences_axis(data,ax,colorMap)
+    view = _make_coincidences_axis(data,ax,colorMap,
+                                   scaling_factor=scaling_factor)
 
-    ax.set_xlabel(rf'$x_{{idl}} {"+" if sign==1 else "-"} x_{{sig}}$')
-    ax.set_ylabel(rf'$y_{{idl}} {"+" if sign==1 else "-"} y_{{sig}}$')
+    ax.set_xlabel(rf'$(k_i {"+" if sign==1 else "-"} k_s)_x$')
+    ax.set_ylabel(rf'$(k_i {"+" if sign==1 else "-"} k_s)_y$')
 
     return (fig,view)
 
 def full_filter_plot(time_filtered_data:np.ndarray,
-                     bg_data:np.ndarray) -> tuple[Figure, np.ndarray]:
+                     bg_data:np.ndarray,
+                     g2_cutoff:float = 2.0,
+                     g2_norm_cutoff:float = 1.0,
+                     g2_norm_scale:float = 1.0,
+                     colormap:str = 'viridis',
+                     fitted:bool = False,
+                     smoothed:bool = False,
+                     g2_neighbors:bool = False) -> tuple[Figure, np.ndarray]:
     # This creates a full filter plot to show all the steps of the filtering 
     # processs in a convenient way
 
@@ -221,45 +233,64 @@ def full_filter_plot(time_filtered_data:np.ndarray,
                             HHII
                             ''')
 
-    plot_coincidences(time_filtered_data, colorMap='viridis', fig=fig, 
+    plot_coincidences(time_filtered_data, colorMap=colormap, fig=fig, 
                              ax_signal=axs['D'], ax_idler=axs['E'])
-    axs['D'].set_xlabel("$k_x$", fontsize=16)
-    axs['D'].set_ylabel("$k_y$", fontsize=16)
+    axs['D'].set_xlabel("$k_x$ (pixels)", fontsize=16)
+    axs['D'].set_ylabel("$k_y$ (pixels)", fontsize=16)
     axs['D'].set_title("Direct Signal Momentum", fontsize=16)
-    axs['E'].set_xlabel("$k_x$", fontsize=16)
-    axs['E'].set_ylabel("$k_y$", fontsize=16)
+    axs['E'].set_xlabel("$k_x$ (pixels)", fontsize=16)
+    axs['E'].set_ylabel("$k_y$ (pixels)", fontsize=16)
     axs['E'].set_title("Direct Idler Momentum", fontsize=16)
 
-    plot_correlations(time_filtered_data, colorMap='viridis', fig=fig,
+    plot_correlations(time_filtered_data, colorMap=colormap, fig=fig,
                              ax_x=axs['A'], ax_y=axs['B'])
-    axs['A'].set_xlabel("$k_s$", fontsize=16)
-    axs['A'].set_ylabel("$k_i$", fontsize=16)
+    axs['A'].set_xlabel("$k_s$ (pixels)", fontsize=16)
+    axs['A'].set_ylabel("$k_i$ (pixels)", fontsize=16)
     axs['A'].set_title("Momentum X-Component Correlation", fontsize=16)
-    axs['B'].set_xlabel("$k_s$", fontsize=16)
-    axs['B'].set_ylabel("$k_i$", fontsize=16)
+    axs['B'].set_xlabel("$k_s$ (pixels)", fontsize=16)
+    axs['B'].set_ylabel("$k_i$ (pixels)", fontsize=16)
     axs['B'].set_title("Momentum Y-Component Correlation", fontsize=16)
 
     fig.sca(axs['C'])
-    plot_coincidence_xy(time_filtered_data,fig=fig)
-    axs['C'].set_facecolor(colormaps['viridis'](0))
-    axs['C'].set_xlabel('$(k_s + k_i)_x$', fontsize=16)
-    axs['C'].set_ylabel('$(k_s + k_i)_y$', fontsize=16)
-    axs['C'].set_title("Momentum Sum Correlation ($k_s + k_i$)", fontsize=16)
+    _,coinc_view = plot_coincidence_xy(time_filtered_data,fig=fig,
+                                       colorMap=colormap)
+    axs['C'].set_facecolor(colormaps[colormap](0))
+    axs['C'].set_xlabel('$(k_s + k_i)_x$ (pixels)', fontsize=16)
+    axs['C'].set_ylabel('$(k_s + k_i)_y$ (pixels)', fontsize=16)
+    axs['C'].set_title("Momentum Sum - Correlated ($k_s + k_i$)", fontsize=16)
     
     fig.sca(axs['F'])
-    _,bg_view = plot_coincidence_xy(bg_data,fig=fig)
+    _,bg_view = plot_coincidence_xy(bg_data,fig=fig,colorMap=colormap,
+                                    scaling_factor=g2_norm_scale)
     bg_fitted = _fit_normalization(bg_view)
-    contours = axs['F'].contour(asnumpy(bg_fitted), 
-                                levels = \
-                                    np.concatenate([np.linspace(0,1,num=5,
-                                                                endpoint=False),
-                                                    np.linspace(1,1.5,num=5)]),
-                                colors='w')
-    axs['F'].clabel(contours, contours.levels, inline=True, fontsize=10)
-    axs['F'].set_facecolor(colormaps['viridis'](0))
-    axs['F'].set_xlabel('$(k_s + k_i)_x$', fontsize=16)
-    axs['F'].set_ylabel('$(k_s + k_i)_y$', fontsize=16)
-    axs['F'].set_title("Normalization (Fit contours shown)", fontsize=16)
+    axs['F'].get_images()[0].set_clim(vmin=coinc_view.min(),
+                                      vmax=coinc_view.max())
+    #if not(contour):
+    #    axs['F'].imshow(asnumpy(bg_fitted),origin='lower', aspect='auto',
+    #                    interpolation='none',cmap=colormap,
+    #                    vmin=coinc_view.min(), vmax=coinc_view.max())
+    if fitted:
+        try:
+            contours =  axs['F'].contour(asnumpy(bg_fitted), 
+                                        levels = \
+                                            np.concatenate([np.linspace(0,1,num=5,
+                                                                        endpoint=False),
+                                                            np.linspace(1,
+                                                                        float(bg_fitted.max()),
+                                                                        num=5,
+                                                                        endpoint=False)]),
+                                    colors='w')
+        except:
+            contours =  axs['F'].contour(asnumpy(bg_fitted), 
+                                        levels = np.linspace(0,1,num=5,
+                                                             endpoint=False),
+                                    colors='w')
+        axs['F'].clabel(contours, contours.levels, inline=True, fontsize=10)
+        
+    axs['F'].set_facecolor(colormaps[colormap](0))
+    axs['F'].set_xlabel('$(k_s + k_i)_x$ (pixels)', fontsize=16)
+    axs['F'].set_ylabel('$(k_s + k_i)_y$ (pixels)', fontsize=16)
+    axs['F'].set_title(f"Uncorrelated{' (Fit contours shown)' if fitted else ''}", fontsize=16)
     
     left = min(axs['C'].get_xlim()[0], axs['F'].get_xlim()[0])
     right = max(axs['C'].get_xlim()[1], axs['F'].get_xlim()[1])
@@ -267,33 +298,36 @@ def full_filter_plot(time_filtered_data:np.ndarray,
     top = max(axs['C'].get_ylim()[1], axs['F'].get_ylim()[1])
     
     space_filtered_data, mask, g_2 = \
-        space_filter_g2(time_filtered_data, bg_data)
+        space_filter_g2(time_filtered_data, bg_data, g2_cutoff, 
+                        norm_scale=g2_norm_scale,norm_cutoff=g2_norm_cutoff,
+                        norm_fit=fitted, norm_smooth=smoothed,
+                        neighbors=g2_neighbors)
         
     scale_max = g_2[75:-75,75:-75].max()
 
     axs['G'].imshow(asnumpy(g_2), origin='lower', aspect='equal', 
                     interpolation='none', extent=[left,right,bottom,top],
-                    vmax=scale_max)
-    axs['G'].set_facecolor(colormaps['viridis'](0))
-    axs['G'].set_xlabel('$(k_s + k_i)_x$', fontsize=16)
-    axs['G'].set_ylabel('$(k_s + k_i)_y$', fontsize=16)
+                    vmax=scale_max, cmap=colormap)
+    axs['G'].set_facecolor(colormaps[colormap](0))
+    axs['G'].set_xlabel('$(k_s + k_i)_x$ (pixels)', fontsize=16)
+    axs['G'].set_ylabel('$(k_s + k_i)_y$ (pixels)', fontsize=16)
     axs['G'].set_title("$g(2)$", fontsize=16)
 
     axs['J'].imshow(asnumpy(np.where(mask,g_2,0)), origin='lower', aspect='equal', 
                     interpolation='none', extent=[left,right,bottom,top],
-                    vmax=scale_max)
-    axs['J'].set_facecolor(colormaps['viridis'](0))
-    axs['J'].set_xlabel('$(k_s + k_i)_x$', fontsize=16)
-    axs['J'].set_ylabel('$(k_s + k_i)_y$', fontsize=16)
-    axs['J'].set_title("$g(2) > 2$", fontsize=16)
+                    vmax=scale_max, cmap=colormap)
+    axs['J'].set_facecolor(colormaps[colormap](0))
+    axs['J'].set_xlabel('$(k_s + k_i)_x$ (pixels)', fontsize=16)
+    axs['J'].set_ylabel('$(k_s + k_i)_y$ (pixels)', fontsize=16)
+    axs['J'].set_title(f"$g(2) > {g2_cutoff}$", fontsize=16)
 
-    plot_coincidences(space_filtered_data, colorMap='viridis', fig=fig, 
+    plot_coincidences(space_filtered_data, colorMap=colormap, fig=fig, 
                              ax_signal=axs['H'], ax_idler=axs['I'])
-    axs['H'].set_xlabel("$k_x$", fontsize=16)
-    axs['H'].set_ylabel("$k_y$", fontsize=16)
+    axs['H'].set_xlabel("$k_x$ (pixels)", fontsize=16)
+    axs['H'].set_ylabel("$k_y$ (pixels)", fontsize=16)
     axs['H'].set_title("Filtered Signal Momentum", fontsize=16)
-    axs['I'].set_xlabel("$k_x$", fontsize=16)
-    axs['I'].set_ylabel("$k_y$", fontsize=16)
+    axs['I'].set_xlabel("$k_x$ (pixels)", fontsize=16)
+    axs['I'].set_ylabel("$k_y$ (pixels)", fontsize=16)
     axs['I'].set_title("Filtered Idler Momentum", fontsize=16)
     
     fig.tight_layout()
@@ -371,7 +405,8 @@ def magnify_rot(ref:np.ndarray, M:float, rot:float) -> np.ndarray:
 def _make_coincidences_axis(pix:np.ndarray,
                             ax:Axes,
                             colorMap:str='viridis',
-                            flipped=False) -> np.ndarray:
+                            flipped=False,
+                            scaling_factor:float = 1.0) -> np.ndarray:
     (view,xrange,yrange) = _make_view(pix)
 
     if type(colorMap) is str:
@@ -386,10 +421,10 @@ def _make_coincidences_axis(pix:np.ndarray,
     if flipped:
         view = np.rot90(view,2)
 
-    ax.imshow(asnumpy(view),origin='lower',aspect='auto',extent=[0,xrange,0,yrange],\
-        interpolation='none',cmap=cmap)
+    ax.imshow(asnumpy(view*scaling_factor),origin='lower',aspect='auto',
+              extent=[0,xrange,0,yrange],interpolation='none',cmap=cmap)
 
-    return view
+    return view*scaling_factor
 
 def _make_view(pix:np.ndarray):
     xmin = np.min(pix[0,:])
