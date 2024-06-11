@@ -422,7 +422,10 @@ def _gen_pos_circ(number: int,
         
     rands = gen.random((len(beams), 2, int(np.ceil(number/len(beams)))))
     if verbose: print(f'position generator values made')
-    pos = np.zeros((2,number))
+    if CUDA:
+        pos = xp.zeros((2,number))
+    else:
+        pos = np.zeros((2,number))
     if verbose: print(f'position output allocated')
     
     for i,beam in enumerate(beams):
@@ -438,7 +441,12 @@ def _gen_pos_circ(number: int,
             (r * np.cos(theta) * width_x[i]))[:(high_idx-low_idx)]
         pos[1,low_idx:high_idx] = np.floor(centers[i][1] + \
             (r * np.sin(theta) * width_y[i]))[:(high_idx-low_idx)]
-    gen.shuffle(pos,axis=1) # randomize order
+    if CUDA:
+        pos = asnumpy(pos.T) # annoying
+        np.random.shuffle(pos.T)
+        pos = xp.asarray(pos.T)
+    else:
+        gen.shuffle(pos,axis=1) # randomize order
     if verbose: print(f'positions generated')
     
     return pos
