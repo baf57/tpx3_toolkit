@@ -144,7 +144,8 @@ def space_filter_g2(coincidences:np.ndarray,
                     norm_cutoff: float = 1.0,
                     norm_fit: bool = True,
                     norm_smooth: bool = False,
-                    neighbors: bool = False) \
+                    neighbors: bool = False,
+                    neighbor_distance: int = 7) \
                         -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     '''
     Perfoms a filter based off of the statistical independence test as defined
@@ -159,7 +160,7 @@ def space_filter_g2(coincidences:np.ndarray,
         mask = mask & (view_g2 < upper_limit)
         
     if neighbors:
-        mask = _g2_neighbors(mask) # another type of smoothing essentially
+        mask = _g2_neighbors(mask, neighbor_distance) # another type of smoothing essentially
     f = mask[indices_sum]
     
     return (coincidences[:,:,f], mask, view_g2)
@@ -301,7 +302,7 @@ def g2(coincidences: np.ndarray,
         view_bg = _fit_normalization(view_bg) # throwing a fit
     view_bg[view_bg<cutoff] = cutoff # this prevents explosive values
     if smooth:
-        view_bg = _smooth_correlations(view_bg,1) # smooths the correlations
+        view_bg = _smooth_correlations(view_bg,3) # smooths the correlations
             
     with np.errstate(divide='ignore'):
         # <I(k_xi+k_xs, k_yi+k_ys)I(k_xi+k_xs, k_yi+k_ys)> / 
@@ -338,8 +339,8 @@ def _fit_normalization(background):
     y_bg = np.arange(background.shape[0])
     xy_bg = np.meshgrid(x_bg, y_bg)
     xx_bg, yy_bg = xy_bg
-    x0 = x_bg.mean()
-    y0 = y_bg.mean()
+    x0 = np.average(xx_bg, weights=background)
+    y0 = np.average(yy_bg, weights=background)
     A = background[np.sqrt((x0-xx_bg)**2 + (y0-yy_bg)**2)<10].mean()
     
     bg_gauss = gen_2dgauss(A, x0, y0)
@@ -352,15 +353,24 @@ def _smooth_correlations(correlations,strength):
     correlations = gaussian_filter(asnumpy(correlations),strength)
     return xp.array(correlations)
 
-def _g2_neighbors(correlations):
+def _g2_neighbors(correlations, neighbor_distance):
     def check_neighbors(array):
         if array[2] == 1:
-            return array.mean() > 0.5
+            return array.mean() > 0.8
         return False
     
-    footprint = np.array([[1,1,1],
-                          [1,1,1],
-                          [1,1,1]])
+    limit = int((np.ceil((neighbor_distance + 1) / 2) * 2 - 1))
+    
+    ul = np.zeros((int(np.ceil(limit/2)),int(np.ceil(limit/2))))
+    ul[0,:] = np.linspace(limit/2, int(limit/2), num = ul.shape[0])
+    i = int(ul[0, -1])
+    for i,j in enumerate(np.arange(i)[::-1]):
+        ul[i+1,:] = np.linspace(ul[0,i+1], j, num = ul.shape[0])
+    
+    footprint = np.concatenate([ul,ul[:,-2::-1]], axis = 1)
+    footprint = np.concatenate([footprint, footprint[-2::-1,:]], axis = 0)
+    
+    footprint = np.where(footprint <= neighbor_distance/2, 1, 0)
     correlations = generic_filter(asnumpy(correlations), check_neighbors, 
                                   footprint=footprint)
     

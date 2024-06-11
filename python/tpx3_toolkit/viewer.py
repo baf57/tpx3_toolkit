@@ -217,7 +217,8 @@ def full_filter_plot(time_filtered_data:np.ndarray,
                      colormap:str = 'viridis',
                      fitted:bool = False,
                      smoothed:bool = False,
-                     g2_neighbors:bool = False) -> tuple[Figure, np.ndarray]:
+                     g2_neighbors:bool = False,
+                     neighbors_distance:int = 7) -> tuple[Figure, np.ndarray]:
     # This creates a full filter plot to show all the steps of the filtering 
     # processs in a convenient way
 
@@ -301,7 +302,8 @@ def full_filter_plot(time_filtered_data:np.ndarray,
         space_filter_g2(time_filtered_data, bg_data, g2_cutoff, 
                         norm_scale=g2_norm_scale,norm_cutoff=g2_norm_cutoff,
                         norm_fit=fitted, norm_smooth=smoothed,
-                        neighbors=g2_neighbors)
+                        neighbors=g2_neighbors, 
+                        neighbor_distance=neighbors_distance)
         
     scale_max = g_2[75:-75,75:-75].max()
 
