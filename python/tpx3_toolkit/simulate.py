@@ -349,23 +349,26 @@ def _gen_toas(n_exp: float,
     # sequential so that I can see progress as it takes a long time
     if verbose: print(f'generating toas\n\t{n_bins=} {n_exp=}')
     
-    toa_dist_parts = []
+    # this in-place generation should be more memory efficient
+    toa_dist = np.zeros(n_bins, dtype=int)
+    low_idx = 0
     number = 0
     for i in range(100):
-        toa_dist_parts.append(np.floor(gen.poisson(n_exp,int(n_bins/100))))
-        number += np.sum(toa_dist_parts[i])
+        high_idx = low_idx + int(n_bins/100)
+        curr = gen.poisson(n_exp,int(n_bins/100)).astype(int) # slow :(
+        number += int(np.sum(curr))
+        toa_dist[low_idx:high_idx] = curr
+        low_idx = high_idx
         if verbose: print(f'\t\t{i:3}% of toa generated',end='\r')
-    toa_dist_parts.append(np.floor(gen.poisson(n_exp,int(n_bins%100))))
-    number += np.sum(toa_dist_parts[-1])
-    number = int(number)
+    curr = gen.poisson(n_exp,int(n_bins%100)).astype(int)
+    number += int(np.sum(curr))
+    toa_dist[low_idx:] = curr
     
     if verbose:
         print(f'\t\t{100:3}% of toa generated')
         print(f'\t{number} events generated')
-        print(f'\tconcatenating...')
+        print(f'\ttoa dist generated')
         
-    toa_dist = np.concatenate(toa_dist_parts).astype(int)
-    if verbose: print(f'\ttoa dist generated')
     
     # this has some bug if I attempt to make times a cupy array at first. I am
     # getting around this by just doing it as numpy and then casting back to 

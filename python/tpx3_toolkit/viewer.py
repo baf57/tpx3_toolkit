@@ -305,7 +305,10 @@ def full_filter_plot(time_filtered_data:np.ndarray,
                         neighbors=g2_neighbors, 
                         neighbor_distance=neighbors_distance)
         
-    scale_max = g_2[75:-75,75:-75].max()
+    scale_range_min = int((g_2.shape[0] // 2) - (0.1*g_2.shape[0]))
+    scale_range_max = int((g_2.shape[0] // 2) + (0.1*g_2.shape[0]))
+    scale_max = g_2[scale_range_min:scale_range_max,
+                    scale_range_min:scale_range_max].max()
 
     axs['G'].imshow(asnumpy(g_2), origin='lower', aspect='equal', 
                     interpolation='none', extent=[left,right,bottom,top],
