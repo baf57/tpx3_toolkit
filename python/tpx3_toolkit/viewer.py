@@ -45,7 +45,7 @@ def make_hits_axes(pix:np.ndarray,
     indices = (pix[1,:].astype(int),pix[0,:].astype(int))
     xp.add.at(CCD,indices,1) # adds 1 to the CCD value at each hit's (x,y)
 
-    cmap = copy.copy(cm.get_cmap(colorMap))
+    cmap = copy.copy(plt.get_cmap(colorMap))
     if hasattr(cmap,'colors'):
         cmap.set_bad(cmap.colors[0]) #type:ignore
     else:
@@ -60,7 +60,7 @@ def draw_beam_box(ax:Axes,
                   beams:list[Beam],
                   boxColors:list[str]=[]) -> list[LineCollection]:
     if len(boxColors) == 0:
-        cmap = cm.get_cmap('Set1')
+        cmap = plt.get_cmap('Set1')
         colors = [cmap.colors[i%len(cmap.colors)] for i in range(len(beams))] #type: ignore
     elif len(boxColors) == 1:
         colors = boxColors * len(beams)
@@ -379,6 +379,9 @@ def bin(view:np.ndarray, xbinsize:int, ybinsize:int=None) -> np.ndarray:
     '''
     Spatially bins the *view* of data.
     '''
+    #BUG: This somehow modifies view when called on a CuPy array??? My 
+    # suggestion would be to call this as bin(view.copy(),...) as this seems to
+    # work
     if ybinsize is None: # legacy call
         ybinsize = xbinsize
     
@@ -415,7 +418,7 @@ def _make_coincidences_axis(pix:np.ndarray,
     (view,xrange,yrange) = _make_view(pix)
 
     if type(colorMap) is str:
-        cmap = copy.copy(cm.get_cmap(colorMap))
+        cmap = copy.copy(plt.get_cmap(colorMap))
     else:
         cmap = copy.copy(colorMap)
     if hasattr(cmap,'colors'):
