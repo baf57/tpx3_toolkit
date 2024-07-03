@@ -72,11 +72,6 @@ pub fn i_parse(inp_file: &str)
                 f_t_o_a = ((pix_buffer>>16) & 0xF) as u16;
                 spidr_time = (pix_buffer & 0xFFFF) as u16;
                 //let tftoa = (t_o_a<<4) | (!f_t_o_a & 0xF);
-                //println!("rust:");
-                //println!("\ttoa: {t_o_a}");
-                //println!("\ttot: {t_o_t}");
-                //println!("\tftoa: {tftoa:04b}");
-                //println!("\tspidr: {spidr_time}");
                 
                 // Axis need to be mirrored to reflect the actual camera orientation in lab frame
                 pix[0].push(255.0 - (((s_pix<<2) as f64) + ((pix_raw & 0x3) as f64)));
@@ -85,8 +80,22 @@ pub fn i_parse(inp_file: &str)
                             ((((t_o_a<<4) | (!f_t_o_a & 0xF)) as f64) * (25.0/16.0))); //wrong
                 pix[3].push((t_o_t as f64) * 25.0);
 
-                //println!("r: {i:x}: {pix_buffer:064b}");
-                //break;
+                //if i > 1000{
+                //    println!("r: {i:x}: {pix_buffer:064b}");
+                //    println!("\td_col: {d_col:08b} = {d_col}");
+                //    println!("\ts_pix: {s_pix:08b} = {s_pix}");
+                //    println!("\tpix_raw: {pix_raw:08b} = {pix_raw}");
+                //    println!("\ttoa: {t_o_a:016b} = {t_o_a}");
+                //    println!("\ttot: {t_o_t:016b} = {t_o_t}");
+                //    println!("\tftoa: {f_t_o_a:016b} = {f_t_o_a}");
+                //    println!("\tspidr_time: {spidr_time:016b} = {spidr_time}");
+                //    println!("");
+                //    println!("\tX: {}", pix[0].last().unwrap());
+                //    println!("\tY: {}", pix[1].last().unwrap());
+                //    println!("\tToA: {}", pix[2].last().unwrap());
+                //    println!("\tToT: {}", pix[3].last().unwrap());
+                //    break;
+                //}
             }
         }
     }

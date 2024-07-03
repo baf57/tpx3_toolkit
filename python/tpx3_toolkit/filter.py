@@ -211,7 +211,8 @@ def g2(coincidences: np.ndarray,
        cutoff: float = 1.0,
        norm_scale: float = 1.0,
        fit: bool = True,
-       smooth: bool = False) -> tuple[np.ndarray,np.ndarray]:
+       smooth: bool = False,
+       smooth_strength: float = 3.0) -> tuple[np.ndarray,np.ndarray]:
     data_i = coincidences[0,:,:] # idler events (singles)
     data_s = coincidences[1,:,:] # signal events (singles)
     bg_i = background[0,:,:] # idler background events (singles)
@@ -302,7 +303,7 @@ def g2(coincidences: np.ndarray,
         view_bg = _fit_normalization(view_bg) # throwing a fit
     view_bg[view_bg<cutoff] = cutoff # this prevents explosive values
     if smooth:
-        view_bg = _smooth_correlations(view_bg,3) # smooths the correlations
+        view_bg = _smooth_correlations(view_bg,smooth_strength) # smooths the correlations
             
     with np.errstate(divide='ignore'):
         # <I(k_xi+k_xs, k_yi+k_ys)I(k_xi+k_xs, k_yi+k_ys)> / 

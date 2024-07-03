@@ -267,7 +267,7 @@ def clustering(pix: np.ndarray,
             new_centroids = np.logical_not(mask)
 
             # Set mask to False wherever element is part of cluster, i.e. mask[i] 
-        # being False indicates that it is in a cluster with mask[i-j]
+            # being False indicates that it is in a cluster with mask[i-j]
             # (for i >=j). False elements in mask will be discarded
             mask[offset::offset] = np.invert(
                                     np.logical_and(
@@ -606,7 +606,7 @@ def find_coincidences(pix: np.ndarray,
                                                         pix[:,pairs[1]]],
                                                        axis=0)
         start_ind = end_ind
-        
+    
     return coincidences
 
 def generate_ToA_correction():
