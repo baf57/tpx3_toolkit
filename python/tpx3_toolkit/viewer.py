@@ -414,6 +414,7 @@ def _make_coincidences_axis(pix:np.ndarray,
                             ax:Axes,
                             colorMap:str='viridis',
                             flipped=False,
+                            reflected=False,
                             scaling_factor:float = 1.0) -> np.ndarray:
     (view,xrange,yrange) = _make_view(pix)
 
@@ -428,6 +429,8 @@ def _make_coincidences_axis(pix:np.ndarray,
         
     if flipped:
         view = np.rot90(view,2)
+    if reflected:
+        view = view[:,::-1]
 
     ax.imshow(asnumpy(view*scaling_factor),origin='lower',aspect='auto',
               extent=[0,xrange,0,yrange],interpolation='none',cmap=cmap)

@@ -277,13 +277,12 @@ def apply_target_mask(data: np.ndarray,
     assert beam.area == mask.size, \
         f"Mask must be same size as beam! ({mask.size}!={beam.area})"
         
-    loc = data[:2,:].copy()
+    loc = data[:2,beam.in_beam(data)]
     loc[0,:] = loc[0,:] - beam.left
     loc[1,:] = loc[1,:] - beam.bottom
     
-    f = np.where(beam.in_beam(data), 
-                 mask[tuple(loc.astype(int))],
-                 True)
+    f = xp.ones_like(data[0,:], dtype=bool)
+    f[beam.in_beam(data)] = mask[tuple(loc.astype(int))]
     
     return data[:,f], f.size - f.sum()
     
