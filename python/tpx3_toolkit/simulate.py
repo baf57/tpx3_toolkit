@@ -382,6 +382,10 @@ def distort_beam(data:np.ndarray,
     ynum = yrange // fineness
     map_shape = ((2*distance)+1,(2*distance)+1)
     
+    loc = data[:2,:]
+    loc[0,:] = loc[0,:] - xmin - 1
+    loc[1,:] = loc[1,:] - ymin - 1
+    
     if maps_in is None:
         maps = []
     else:
@@ -409,7 +413,7 @@ def distort_beam(data:np.ndarray,
         if(i%1000 == 0):
             print(f'\tprogress: {i / data.shape[1] * 100:5.1f}%', end='\r')
         index = np.argmax(\
-                        maps[int(key[tuple(data[:2,i].astype(int))])] > rands[i])
+                        maps[int(key[tuple(loc[:,i].astype(int))])] > rands[i])
         offset = np.unravel_index(int(index),map_shape)
         offset = xp.array([offset[0] - distance,offset[1] - distance])
         new_data[:2,i] = data[:2,i] + offset
