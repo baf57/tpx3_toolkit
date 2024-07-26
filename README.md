@@ -2,6 +2,11 @@
 A Python toolkit for loading, parsing, and analyzing TimePix3 generated flies 
 (.tpx3), as well as visualizing and manipulating data from these files.
 
+# Installation
+Installation instructions can be found in the 
+[wiki](https://github.com/baf57/tpx3_toolkit/wiki/Installation-and-Updating), 
+and following them is strongly recommended.
+
 # Dependencies
 The following Python packages are required to use this toolkit. They should be 
 automatically installed when this toolkit is installed when using `pip`
